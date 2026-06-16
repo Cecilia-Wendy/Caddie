@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 本地运行数据 / 密钥（绝不上传）
+*.db
+config.json
+/data/
+~/.caddie/
+
+# 系统
+.DS_Store

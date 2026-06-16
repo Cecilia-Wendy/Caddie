@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caddie 求职管家</title>
+<style>
+  :root{
+    --bg:#f6f5f1; --panel:#ffffff; --ink:#1d1c1a; --sub:#76726a;
+    --line:#e6e3dc; --line-strong:#d4d0c6;
+    --accent:#3f7d5e; --accent-soft:#e8f1ec; --accent-ink:#2c5a43;
+    --warn:#b4533a; --chip:#f0eee8;
+    --radius:14px; --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,textarea,select{font-family:inherit;font-size:14px;color:var(--ink)}
+  .app{display:flex;height:100vh}
+
+  /* ── Sidebar ── */
+  .side{width:212px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:18px 12px}
+  .brand{display:flex;align-items:center;gap:9px;padding:6px 10px 18px}
+  .brand .logo{width:30px;height:30px;border-radius:9px;background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-weight:700;font-size:16px}
+  .brand b{font-size:17px;letter-spacing:.2px}
+  .brand small{display:block;color:var(--sub);font-size:11px;font-weight:400}
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+  .nav button{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;
+    color:var(--sub);font-size:14px;font-weight:500;text-align:left;transition:.12s}
+  .nav button .ic{font-size:16px;width:18px;text-align:center}
+  .nav button:hover{background:var(--chip);color:var(--ink)}
+  .nav button.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+  .side-foot{margin-top:auto;padding:8px 6px 2px}
+  .prov-chip{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--line);
+    border-radius:11px;font-size:12px;background:var(--panel)}
+  .prov-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0}
+  .prov-chip .dot.off{background:#c9c4ba}
+  .prov-chip span{color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prov-chip b{color:var(--ink);font-weight:600}
+
+  /* ── Main ── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:56px;flex-shrink:0;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;align-items:center;gap:14px;padding:0 22px}
+  .search{flex:1;max-width:460px;position:relative}
+  .search input{width:100%;height:38px;border:1px solid var(--line-strong);border-radius:10px;
+    padding:0 14px 0 36px;background:var(--bg);outline:none;transition:.12s}
+  .search input:focus{border-color:var(--accent);background:var(--panel)}
+  .search .si{position:absolute;left:12px;top:10px;color:var(--sub);font-size:15px}
+  .search-pop{position:absolute;top:44px;left:0;right:0;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;box-shadow:var(--shadow);max-height:340px;overflow:auto;z-index:40;display:none}
+  .search-pop.show{display:block}
+  .sr{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .sr:last-child{border:none}.sr:hover{background:var(--chip)}
+  .sr .t{font-size:13px;font-weight:600}.sr .s{font-size:12px;color:var(--sub);margin-top:2px}
+  .sr .badge{font-size:10px;color:var(--accent-ink);background:var(--accent-soft);padding:1px 6px;border-radius:5px;margin-right:6px}
+  .topbar .right{margin-left:auto;color:var(--sub);font-size:12.5px}
+
+  .view{flex:1;overflow:auto;padding:26px 30px}
+  .view-head{margin-bottom:20px}
+  .view-head h1{font-size:21px;letter-spacing:.2px}
+  .view-head p{color:var(--sub);font-size:13.5px;margin-top:5px}
+
+  .btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 15px;border-radius:9px;
+    font-size:13.5px;font-weight:600;background:var(--accent);color:#fff;transition:.12s}
+  .btn:hover{filter:brightness(1.05)}
+  .btn.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line-strong)}
+  .btn.ghost:hover{background:var(--chip)}
+  .btn.sm{height:30px;padding:0 11px;font-size:12.5px}
+  .btn.danger{background:none;color:var(--warn);border:1px solid transparent}
+  .btn.danger:hover{background:#f7ece8}
+
+  /* ── Settings (the star) ── */
+  .prov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 16px 14px;
+    position:relative;transition:.15s}
+  .pcard.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .pcard .ph{display:flex;align-items:flex-start;gap:10px}
+  .pcard .pname{font-size:15.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .ttype{font-size:10.5px;font-weight:600;color:var(--sub);background:var(--chip);padding:2px 7px;border-radius:6px}
+  .pcard .meta{margin-top:11px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--sub)}
+  .pcard .meta b{color:var(--ink);font-weight:600}
+  .pcard .pf{margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .useflag{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--accent-ink);
+    background:var(--accent-soft);padding:4px 9px;border-radius:7px}
+  .testline{margin-top:10px;font-size:12px;padding:7px 10px;border-radius:8px;display:none}
+  .testline.ok{display:block;background:var(--accent-soft);color:var(--accent-ink)}
+  .testline.err{display:block;background:#f7ece8;color:var(--warn)}
+  .testline.run{display:block;background:var(--chip);color:var(--sub)}
+  .addcard{border:1.5px dashed var(--line-strong);border-radius:var(--radius);display:grid;place-items:center;
+    min-height:160px;color:var(--sub);font-size:14px;font-weight:600;transition:.15s;background:transparent}
+  .addcard:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
+
+  /* ── Modal ── */
+  .mask{position:fixed;inset:0;background:rgba(28,26,22,.34);display:none;align-items:center;
+    justify-content:center;z-index:100;backdrop-filter:blur(2px)}
+  .mask.show{display:flex}
+  .modal{background:var(--panel);border-radius:18px;width:540px;max-width:92vw;max-height:90vh;overflow:auto;
+    box-shadow:0 20px 60px rgba(0,0,0,.22)}
+  .modal h2{font-size:17px;padding:20px 22px 0}
+  .modal .mp{color:var(--sub);font-size:12.5px;padding:5px 22px 0}
+  .mbody{padding:18px 22px}
+  .field{margin-bottom:15px}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px}
+  .field input,.field select{width:100%;height:40px;border:1px solid var(--line-strong);border-radius:9px;
+    padding:0 12px;background:var(--bg);outline:none;transition:.12s}
+  .field input:focus,.field select:focus{border-color:var(--accent);background:var(--panel)}
+  .presets{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:5px}
+  .preset{font-size:12.5px;padding:7px 12px;border:1px solid var(--line-strong);border-radius:20px;
+    color:var(--sub);font-weight:500;transition:.12s;background:var(--panel)}
+  .preset:hover{border-color:var(--accent)}
+  .preset.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .hint{font-size:11.5px;color:var(--sub);margin-top:5px}
+  .mfoot{display:flex;gap:10px;align-items:center;padding:16px 22px;border-top:1px solid var(--line)}
+  .mfoot .grow{flex:1}
+  .row2{display:flex;gap:12px}.row2>*{flex:1}
+
+  /* ── Chat ── */
+  .chat-wrap{display:flex;flex-direction:column;height:100%}
+  .msgs{flex:1;overflow:auto;padding:8px 4px;display:flex;flex-direction:column;gap:16px}
+  .chat-wrap .msgs, .chat-wrap .composer{max-width:880px;margin-left:auto;margin-right:auto;width:100%}
+  .msg{display:flex;gap:11px;max-width:760px}
+  .msg .av{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;
+    font-size:14px;font-weight:700}
+  .msg.user{align-self:flex-end;flex-direction:row-reverse}
+  .msg.user .av{background:#e7e3da;color:var(--ink)}
+  .msg.ai .av{background:var(--accent);color:#fff}
+  .bubble{padding:11px 15px;border-radius:13px;font-size:14px;line-height:1.62;background:var(--panel);
+    border:1px solid var(--line)}
+  .msg.user .bubble{background:var(--accent-soft);border-color:transparent}
+  .bubble h1,.bubble h2,.bubble h3{font-size:15px;margin:8px 0 4px}
+  .bubble p{margin:5px 0}.bubble ul,.bubble ol{margin:5px 0 5px 20px}
+  .bubble code{background:var(--chip);padding:1px 5px;border-radius:5px;font-size:12.5px}
+  .bubble strong{font-weight:700}
+  .empty-chat{margin:auto;text-align:center;color:var(--sub);max-width:420px}
+  .empty-chat .big{font-size:42px;margin-bottom:14px}
+  .suggs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px}
+  .sugg{font-size:12.5px;padding:8px 13px;border:1px solid var(--line-strong);border-radius:20px;
+    color:var(--sub);background:var(--panel)}
+  .sugg:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .composer{flex-shrink:0;margin:10px 4px 2px;border:1px solid var(--line-strong);border-radius:16px;
+    background:var(--panel);box-shadow:var(--shadow);padding:6px 10px 8px;transition:.12s}
+  .composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .composer textarea{width:100%;min-height:28px;max-height:180px;border:none;outline:none;background:transparent;
+    padding:8px 6px 2px;resize:none;line-height:1.55;font-size:14.5px;display:block;color:var(--ink)}
+  .composer-bar{display:flex;align-items:center;gap:8px;padding:4px 2px 0;margin-top:2px}
+  .composer-bar .spacer{flex:1}
+  .tool{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:9px;font-size:12.5px;font-weight:600;
+    color:var(--sub);background:var(--panel);transition:.12s;display:inline-flex;align-items:center;gap:5px}
+  .tool:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
+  .send{width:34px;height:34px;border-radius:10px;background:var(--accent);color:#fff;font-size:17px;flex-shrink:0;
+    display:grid;place-items:center}
+  .send:hover{filter:brightness(1.05)}
+  .send:disabled{opacity:.5;cursor:default}
+
+  /* ── Chat: sessions + tools + propose card ── */
+  .chat-layout{display:flex;height:100%;gap:0}
+  .sess-pane{width:206px;flex-shrink:0;border-right:1px solid var(--line);padding-right:14px;margin-right:18px;
+    display:flex;flex-direction:column}
+  .newchat{height:38px;border:1px solid var(--line-strong);border-radius:10px;font-weight:600;font-size:13.5px;
+    color:var(--ink);background:var(--panel);margin-bottom:12px;transition:.12s}
+  .newchat:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .sess-list{flex:1;overflow:auto;display:flex;flex-direction:column;gap:3px}
+  .sess{padding:9px 10px;border-radius:9px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:.1s}
+  .sess:hover{background:var(--chip)}.sess.on{background:var(--accent-soft)}
+  .sess .st{flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .sess.on .st{color:var(--accent-ink);font-weight:600}
+  .sess .sx{opacity:0;font-size:13px;color:var(--sub);flex-shrink:0}
+  .sess:hover .sx{opacity:1}.sess .sx:hover{color:var(--warn)}
+  .sess-empty{color:var(--sub);font-size:12px;padding:8px 10px}
+  .iconbtn{height:46px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;font-size:13px;
+    font-weight:600;color:var(--sub);background:var(--panel);flex-shrink:0;white-space:nowrap;transition:.12s}
+  .iconbtn:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .propose-card{border:1px solid var(--accent);background:var(--accent-soft);border-radius:13px;padding:14px 16px;margin:0 4px 12px}
+  .propose-card h4{font-size:13.5px;color:var(--accent-ink);margin-bottom:8px;display:flex;align-items:center;gap:7px}
+  .propose-card .pc-list{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+  .pc-item{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:13px}
+  .pc-item .ty{font-size:10.5px;font-weight:700;color:#fff;background:var(--accent);padding:1px 7px;border-radius:5px;margin-right:8px}
+  .pc-item .ty.upd{background:#9a7b1f}.pc-item .ty.app{background:#3f6ea5}
+  .pc-item .why{color:var(--sub);font-size:12px;margin-top:3px}
+  .propose-card .pc-foot{display:flex;gap:9px;align-items:center}
+  .pc-none{color:var(--sub);font-size:13px;padding:4px 0 12px}
+
+  /* ── Projects ── */
+  .exp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:16px;overflow:hidden}
+  .exp-h{padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+  .exp-h .c{font-size:15px;font-weight:700}.exp-h .r{color:var(--sub);font-size:13px}
+  .exp-h .d{margin-left:auto;color:var(--sub);font-size:12px}
+  .projitem{padding:13px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .projitem:last-child{border:none}.projitem:hover{background:var(--chip)}
+  .projitem .pn{font-size:14px;font-weight:600}.projitem .po{color:var(--sub);font-size:12.5px;margin-top:2px}
+  .projitem .tech{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;max-width:40%}
+  .tg{font-size:10.5px;color:var(--accent-ink);background:var(--accent-soft);padding:2px 7px;border-radius:5px}
+  .doc-view{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px 30px;max-width:820px}
+  .doc-view h1{font-size:22px;margin:0 0 6px}.doc-view h2{font-size:16px;margin:18px 0 6px}
+  .doc-view h3{font-size:14px;margin:14px 0 5px}
+  .doc-view p{margin:7px 0;line-height:1.7;color:#34322e}
+  .doc-view ul,.doc-view ol{margin:7px 0 7px 22px;line-height:1.7}
+  .doc-view blockquote{border-left:3px solid var(--accent);padding:4px 0 4px 14px;color:var(--sub);margin:10px 0}
+  .doc-edit{width:100%;min-height:420px;border:1px solid var(--line-strong);border-radius:12px;padding:16px;
+    font-family:"SF Mono",Menlo,monospace;font-size:13px;line-height:1.7;outline:none;resize:vertical}
+  .doc-split{display:flex;gap:20px;align-items:flex-start}
+  .doc-col{flex:1.3;min-width:0}
+  .doc-col .doc-view{max-width:none}
+  .chat-col{flex:1;min-width:350px;max-width:470px;position:sticky;top:0;height:calc(100vh - 150px);
+    display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:16px;
+    background:var(--panel);padding:14px 14px 10px;box-shadow:var(--shadow)}
+  .pchat-head{font-size:13.5px;font-weight:700;color:var(--ink);padding-bottom:10px;margin-bottom:4px;
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px}
+  .pchat-head small{font-weight:400;color:var(--sub);font-size:11.5px;margin-left:auto}
+  .pmsgs{flex:1;overflow:auto;display:flex;flex-direction:column;gap:13px;min-height:0;padding:12px 2px}
+  .pmsgs .msg{max-width:100%}
+  .chat-col .composer{margin:8px 0 0}
+  .pchat-empty{margin:auto;text-align:center;color:var(--sub);font-size:13px;padding:0 10px;line-height:1.7}
+
+  /* ── Kanban ── */
+  .board{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px}
+  .col{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  .col-h{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;margin-bottom:10px;padding:2px 4px}
+  .col-h .n{margin-left:auto;color:var(--sub);font-weight:600;font-size:12px;background:var(--chip);padding:1px 8px;border-radius:8px}
+  .acard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:9px;cursor:grab}
+  .acard:hover{border-color:var(--line-strong)}
+  .acard .co{font-size:13.5px;font-weight:700}.acard .ro{font-size:12px;color:var(--sub);margin-top:2px}
+  .acard .mt{margin-top:8px;display:flex;gap:6px;align-items:center;font-size:11px;color:var(--sub)}
+  .acard .ind{color:var(--accent-ink);background:var(--accent-soft);padding:1px 7px;border-radius:5px}
+  .seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden}
+  .seg button{padding:7px 14px;font-size:13px;font-weight:600;color:var(--sub);background:var(--panel)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .atable{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;font-size:13px}
+  .atable th{text-align:left;font-size:11.5px;font-weight:700;color:var(--sub);background:var(--bg);
+    padding:11px 13px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .atable td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .atable tr:last-child td{border-bottom:none}
+  .atable tr:hover td{background:var(--chip)}
+  .atable .co{font-weight:700}
+  .schip{font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
+  .s-applied{background:#eceae4;color:#6b6760}.s-screening{background:#e6eef6;color:#35618e}
+  .s-written{background:#efe9d8;color:#8a6d1d}.s-interview{background:#e7f0ea;color:#2c5a43}
+  .s-offer{background:#3f7d5e;color:#fff}.s-rejected{background:#f5e3dd;color:#9a4a32}
+  .tbl-note{color:var(--sub);max-width:240px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+  .stat-row{display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:120px}
+  .stat .v{font-size:24px;font-weight:800}.stat .k{font-size:12px;color:var(--sub);margin-top:2px}
+
+  /* ── History (版本历史) ── */
+  .hist-split{display:flex;gap:18px;align-items:flex-start}
+  .hist-list{width:330px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;
+    max-height:calc(100vh - 160px);overflow:auto}
+  .commit{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;transition:.1s}
+  .commit:hover{border-color:var(--line-strong)}
+  .commit.on{border-color:var(--accent);background:var(--accent-soft)}
+  .commit .cm{font-size:13px;font-weight:600}
+  .commit .cd{font-size:11.5px;color:var(--sub);margin-top:3px;font-family:"SF Mono",Menlo,monospace}
+  .hist-detail{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);
+    padding:8px 14px;max-height:calc(100vh - 160px);overflow:auto}
+  .diff{font-family:"SF Mono",Menlo,monospace;font-size:12px;line-height:1.55;word-break:break-all}
+  .diff span{display:block;white-space:pre-wrap}
+  .diff .add{color:#2c5a43;background:#e7f0ea}
+  .diff .del{color:#9a4a32;background:#f5e3dd}
+  .diff .hd{color:var(--sub)}
+  /* ── Site (个人网页) ── */
+  .load-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;max-width:880px}
+  .load-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .load-card b{font-size:14.5px}.load-card p{color:var(--sub);font-size:12.5px;margin:5px 0 12px}
+  .load-card input{width:100%;height:36px;border:1px solid var(--line-strong);border-radius:8px;padding:0 11px;
+    background:var(--bg);outline:none;margin-bottom:10px;font-size:12.5px}
+  .load-card input:focus{border-color:var(--accent);background:var(--panel)}
+  .site-split{display:flex;gap:18px;align-items:flex-start}
+  .site-preview{flex:1.5;min-width:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    background:#fff;height:calc(100vh - 150px);box-shadow:var(--shadow)}
+  .site-preview iframe{width:100%;height:100%;border:none;display:block}
+  .site-side{flex:1;min-width:330px;max-width:430px;position:sticky;top:0;
+    height:calc(100vh - 150px);display:flex;flex-direction:column;gap:11px;overflow:auto}
+  .site-side .lbl{font-size:12.5px;color:var(--sub);line-height:1.6}
+  .site-side textarea{width:100%;min-height:74px;border:1px solid var(--line-strong);border-radius:11px;
+    padding:11px 13px;resize:vertical;outline:none;background:var(--panel);font-size:13.5px;line-height:1.5}
+  .site-side textarea:focus{border-color:var(--accent)}
+  .edit-item{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:12.5px;margin-bottom:7px}
+  .edit-item .rs{color:var(--accent-ink);font-weight:600;margin-bottom:5px}
+  .edit-item .df{color:var(--warn);text-decoration:line-through;opacity:.7;display:block;word-break:break-all}
+  .edit-item .rp{color:var(--accent-ink);display:block;word-break:break-all}
+  .edit-item .nf{font-size:10.5px;color:var(--warn);background:#f7ece8;padding:1px 6px;border-radius:5px;margin-left:6px}
+  .style-warn{background:#f7ece8;color:var(--warn);font-size:12.5px;padding:8px 11px;border-radius:8px;font-weight:600}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:10px 18px;border-radius:10px;font-size:13px;z-index:200;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .spinner{width:15px;height:15px;border:2px solid var(--line-strong);border-top-color:var(--accent);
+    border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-2px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">C</div>
+      <div><b>Caddie</b><small>求职管家</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-v="chat" class="on"><span class="ic">💬</span>聊天台</button>
+      <button data-v="projects"><span class="ic">📁</span>经历 · 项目</button>
+      <button data-v="board"><span class="ic">📋</span>投递看板</button>
+      <button data-v="site"><span class="ic">🌐</span>个人网页</button>
+      <button data-v="history"><span class="ic">🕘</span>版本历史</button>
+      <button data-v="settings"><span class="ic">⚙️</span>设置</button>
+    </nav>
+    <div class="side-foot">
+      <div class="prov-chip" id="provChip" title="当前使用的 AI" onclick="go('settings')" style="cursor:pointer">
+        <div class="dot off" id="provDot"></div>
+        <span>当前 AI：<b id="provName">未配置</b></span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="search">
+        <span class="si">🔍</span>
+        <input id="searchBox" placeholder="检索经历、项目、关键词…" autocomplete="off">
+        <div class="search-pop" id="searchPop"></div>
+      </div>
+      <div class="right" id="topHint">本地运行 · 数据存在 ~/.caddie</div>
+    </div>
+    <section class="view" id="view"></section>
+  </main>
+</div>
+
+<!-- Provider modal -->
+<div class="mask" id="provMask">
+  <div class="modal">
+    <h2 id="provModalTitle">添加 AI 供应商</h2>
+    <p class="mp">选一个预设一键填好地址和模型，填上你的 API Key 即可。可随时切换。</p>
+    <div class="mbody">
+      <div class="field">
+        <label>选择供应商</label>
+        <div class="presets" id="presetRow"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>显示名称</label><input id="f_name" placeholder="例如：我的 Claude"></div>
+        <div class="field"><label>类型</label>
+          <select id="f_type"><option value="anthropic">Anthropic（/v1/messages）</option>
+            <option value="openai">OpenAI 兼容（/chat/completions）</option></select></div>
+      </div>
+      <div class="field"><label>API 地址 (Base URL)</label><input id="f_base" placeholder="https://..."></div>
+      <div class="row2">
+        <div class="field"><label>模型</label><input id="f_model" list="modelList" placeholder="模型名">
+          <datalist id="modelList"></datalist></div>
+        <div class="field"><label>API Key</label><input id="f_key" type="password" placeholder="留空则不修改已存的">
+          <div class="hint" id="keyHint"></div></div>
+      </div>
+      <div class="testline" id="provTest"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn ghost sm" id="btnTest">🔌 测试连接</button>
+      <div class="grow"></div>
+      <button class="btn ghost sm" onclick="closeProvModal()">取消</button>
+      <button class="btn sm" id="btnSaveProv">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic add modal (experience/project/application) -->
+<div class="mask" id="genMask">
+  <div class="modal" style="width:480px">
+    <h2 id="genTitle">新增</h2>
+    <div class="mbody" id="genBody"></div>
+    <div class="mfoot"><div class="grow"></div>
+      <button class="btn ghost sm" onclick="closeGen()">取消</button>
+      <button class="btn sm" id="genSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (path, opt={}) => {
+  const r = await fetch('/api'+path, {headers:{'Content-Type':'application/json'}, ...opt});
+  if(!r.ok){ let m=r.statusText; try{m=(await r.json()).detail||m}catch(e){} throw new Error(m); }
+  return r.json();
+};
+const toast = (m)=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);};
+const esc = s => (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// tiny markdown -> html
+function md(t){
+  if(!t) return '';
+  const lines=t.split('\n'); let h='', inUl=false, inOl=false;
+  const close=()=>{ if(inUl){h+='</ul>';inUl=false} if(inOl){h+='</ol>';inOl=false} };
+  const inl=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`(.+?)`/g,'<code>$1</code>');
+  for(let l of lines){
+    if(/^### /.test(l)){close();h+='<h3>'+inl(l.slice(4))+'</h3>';}
+    else if(/^## /.test(l)){close();h+='<h2>'+inl(l.slice(3))+'</h2>';}
+    else if(/^# /.test(l)){close();h+='<h1>'+inl(l.slice(2))+'</h1>';}
+    else if(/^> /.test(l)){close();h+='<blockquote>'+inl(l.slice(2))+'</blockquote>';}
+    else if(/^[-*] /.test(l)){if(!inUl){close();h+='<ul>';inUl=true}h+='<li>'+inl(l.slice(2))+'</li>';}
+    else if(/^\d+\. /.test(l)){if(!inOl){close();h+='<ol>';inOl=true}h+='<li>'+inl(l.replace(/^\d+\. /,''))+'</li>';}
+    else if(l.trim()===''){close();}
+    else {close();h+='<p>'+inl(l)+'</p>';}
+  }
+  close(); return h;
+}
+
+let STATE={view:'chat', providers:[], activeId:null, presets:[], session:null, sessions:[], msgs:[], pmsgs:[], _pmsgsFor:null, projectOpen:null, editingDoc:false, boardView:'kanban', pchatMode:'organize'};
+
+// ── Nav ──
+function go(v){ STATE.view=v; document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); render(); }
+$('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v);});
+
+async function refreshProviders(){
+  const d=await api('/providers'); STATE.providers=d.providers; STATE.activeId=d.active_provider_id; STATE.presets=d.presets;
+  const act=STATE.providers.find(p=>p.id===STATE.activeId);
+  $('#provName').textContent=act?act.name:'未配置';
+  $('#provDot').classList.toggle('off',!act);
+}
+
+function render(){
+  const v=$('#view');
+  if(STATE.view==='chat') return renderChat(v);
+  if(STATE.view==='projects') return renderProjects(v);
+  if(STATE.view==='board') return renderBoard(v);
+  if(STATE.view==='site') return renderSite(v);
+  if(STATE.view==='history') return renderHistory(v);
+  if(STATE.view==='settings') return renderSettings(v);
+}
+
+// ════════ SETTINGS (the star) ════════
+function renderSettings(v){
+  v.innerHTML=`<div class="view-head" style="display:flex;align-items:flex-end">
+      <div><h1>AI 供应商</h1><p>添加一个或多个 AI 服务，随时一键切换。Caddie 的所有对话都走你选中的那个。</p></div>
+      <div style="margin-left:auto"><button class="btn" onclick="openProvModal()">＋ 添加供应商</button></div>
+    </div><div class="prov-grid" id="provGrid"></div>`;
+  const g=$('#provGrid');
+  g.innerHTML = STATE.providers.map(p=>{
+    const active=p.id===STATE.activeId;
+    return `<div class="pcard ${active?'active':''}" data-id="${p.id}">
+      <div class="ph"><div style="flex:1">
+        <div class="pname">${esc(p.name)} <span class="ttype">${p.type==='anthropic'?'Anthropic':'OpenAI 兼容'}</span></div>
+      </div>${active?'<span class="useflag">● 使用中</span>':''}</div>
+      <div class="meta">
+        <div>模型　<b>${esc(p.model)||'<span style=color:#b4533a>未设置</span>'}</b></div>
+        <div>地址　${esc(p.base_url)||'—'}</div>
+        <div>密钥　${p.has_key?esc(p.api_key_masked):'<span style=color:#b4533a>未填</span>'}</div>
+      </div>
+      <div class="testline" id="t_${p.id}"></div>
+      <div class="pf">
+        ${active?'':`<button class="btn sm" onclick="activate('${p.id}')">设为当前</button>`}
+        <button class="btn ghost sm" onclick="testCard('${p.id}')">测试</button>
+        <button class="btn ghost sm" onclick="editProv('${p.id}')">编辑</button>
+        <button class="btn danger sm" onclick="delProv('${p.id}')">删除</button>
+      </div></div>`;
+  }).join('') + `<button class="addcard" onclick="openProvModal()">＋ 添加供应商</button>`;
+}
+
+async function activate(id){ await api('/providers/'+id+'/activate',{method:'POST'}); await refreshProviders(); render(); toast('已切换当前 AI'); }
+async function delProv(id){ if(!confirm('删除这个供应商？'))return; await api('/providers/'+id,{method:'DELETE'}); await refreshProviders(); render(); }
+async function testCard(id){
+  const p=STATE.providers.find(x=>x.id===id); const el=$('#t_'+id);
+  el.className='testline run'; el.innerHTML='<span class="spinner"></span> 正在连接…';
+  try{ const r=await api('/providers/test',{method:'POST',body:JSON.stringify({...p,api_key:''})});
+    el.className='testline '+(r.ok?'ok':'err'); el.textContent=r.message;
+  }catch(e){ el.className='testline err'; el.textContent=e.message; }
+}
+
+// Provider modal
+let editId=null;
+function openProvModal(){ editId=null; $('#provModalTitle').textContent='添加 AI 供应商';
+  fillProv({name:'',type:'anthropic',base_url:'',model:'',key_hint:''}); $('#provTest').className='testline'; $('#provMask').classList.add('show'); renderPresets('anthropic'); }
+function editProv(id){ const p=STATE.providers.find(x=>x.id===id); editId=id;
+  $('#provModalTitle').textContent='编辑：'+p.name; fillProv(p); $('#f_key').placeholder='留空则保留已存的密钥';
+  $('#provTest').className='testline'; $('#provMask').classList.add('show'); renderPresets(null); }
+function closeProvModal(){ $('#provMask').classList.remove('show'); }
+function fillProv(p){ $('#f_name').value=p.name||''; $('#f_type').value=p.type||'openai';
+  $('#f_base').value=p.base_url||''; $('#f_model').value=p.model||''; $('#f_key').value='';
+  $('#keyHint').textContent=p.key_hint||''; updateModelList(p.models||[]); }
+function updateModelList(models){ $('#modelList').innerHTML=(models||[]).map(m=>`<option value="${esc(m)}">`).join(''); }
+function renderPresets(activeKey){
+  $('#presetRow').innerHTML=STATE.presets.map(p=>
+    `<button class="preset ${p.key===activeKey?'on':''}" onclick="applyPreset('${p.key}')">${esc(p.name)}</button>`).join('');
+}
+function applyPreset(key){
+  const p=STATE.presets.find(x=>x.key===key); if(!p)return;
+  document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('on',b.textContent===p.name));
+  if(!$('#f_name').value || STATE.presets.some(x=>x.name===$('#f_name').value)) $('#f_name').value=p.name;
+  $('#f_type').value=p.type; $('#f_base').value=p.base_url; $('#keyHint').textContent=p.key_hint;
+  updateModelList(p.models); if(p.models&&p.models.length) $('#f_model').value=p.models[0];
+}
+function collectProv(){ return {id:editId, name:$('#f_name').value.trim(), type:$('#f_type').value,
+  base_url:$('#f_base').value.trim(), model:$('#f_model').value.trim(), api_key:$('#f_key').value }; }
+$('#btnSaveProv').onclick=async()=>{
+  const d=collectProv(); if(!d.name){toast('填一下名称');return;} if(!d.model){toast('填一下模型');return;}
+  await api('/providers',{method:'POST',body:JSON.stringify(d)}); closeProvModal();
+  await refreshProviders(); render(); toast('已保存');
+};
+$('#btnTest').onclick=async()=>{
+  const el=$('#provTest'); el.className='testline run'; el.innerHTML='<span class="spinner"></span> 正在连接…';
+  try{ const r=await api('/providers/test',{method:'POST',body:JSON.stringify(collectProv())});
+    el.className='testline '+(r.ok?'ok':'err'); el.textContent=r.message;
+  }catch(e){ el.className='testline err'; el.textContent=e.message; }
+};
+
+// ════════ CHAT (multi-session) ════════
+const SUGGS=['帮我把"用户留存项目"的细节追问完整','我面试常被问到的项目，怎么讲更有说服力？','根据我的经历，我适合投哪些方向？'];
+async function renderChat(v){
+  v.innerHTML=`<div class="chat-layout">
+    <div class="sess-pane">
+      <button class="newchat" onclick="newChat()">＋ 新对话</button>
+      <div class="sess-list" id="sessList"></div>
+    </div>
+    <div class="chat-wrap">
+      <div class="msgs" id="msgs"></div>
+      <div id="proposeArea"></div>
+      <div class="composer">
+        <textarea id="ta" placeholder="跟 Caddie 说说你的经历，或问任何问题…   (Enter 发送 · Shift+Enter 换行)"></textarea>
+        <div class="composer-bar">
+          <button class="tool" id="importBtn" title="上传简历 PDF，自动拆解建档">📎 简历</button>
+          <button class="tool" id="tidyBtn" title="把这段对话整理成更新，确认后写入">🗂 整理入库</button>
+          <div class="spacer"></div>
+          <button class="send" id="sendBtn" title="发送">↑</button>
+        </div>
+      </div>
+    </div></div>
+    <input type="file" id="fileInput" accept=".pdf,.txt" hidden>`;
+  const ta=$('#ta');
+  ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,180)+'px';});
+  ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
+  $('#sendBtn').onclick=sendMsg;
+  $('#tidyBtn').onclick=tidyToDB;
+  $('#importBtn').onclick=()=>$('#fileInput').click();
+  $('#fileInput').onchange=importResume;
+  try{ await loadSessions(); }catch(e){ /* 后端不可用也别白屏 */ }
+  STATE.msgs && STATE.msgs.length ? paintMsgs() : paintEmpty();
+}
+async function loadSessions(){
+  const list=await api('/sessions'); STATE.sessions=list;
+  const el=$('#sessList'); if(!el)return;
+  el.innerHTML = list.length ? list.map(s=>`<div class="sess ${s.id===STATE.session?'on':''}" onclick="switchSession('${s.id}')">
+      <span class="st">${esc(s.title||'新对话')}</span>
+      <span class="sx" onclick="event.stopPropagation();delSession('${s.id}')">✕</span></div>`).join('')
+    : '<div class="sess-empty">还没有对话，左上「＋ 新对话」开始</div>';
+}
+function newChat(){ STATE.session=null; STATE.msgs=[]; clearPropose(); paintEmpty(); loadSessions(); }
+async function switchSession(sid){
+  STATE.session=sid; clearPropose();
+  STATE.msgs=await api('/sessions/'+sid+'/messages'); paintMsgs(); loadSessions();
+}
+async function delSession(sid){
+  if(!confirm('删除这个对话？'))return;
+  await api('/sessions/'+sid,{method:'DELETE'});
+  if(STATE.session===sid){ STATE.session=null; STATE.msgs=[]; clearPropose(); paintEmpty(); }
+  loadSessions();
+}
+function paintEmpty(){
+  const m=$('#msgs'); if(!m)return;
+  m.innerHTML=`<div class="empty-chat"><div class="big">🏌️</div>
+    <div style="font-size:16px;font-weight:600;color:var(--ink)">我是 Caddie，你的求职管家</div>
+    <p style="margin-top:8px">把经历讲给我，我帮你拆解建档；聊完点「🗂 整理入库」我把更新写进项目/看板（你确认后才生效）。也可以「📎 简历」上传 PDF 一键建档。</p>
+    <div class="suggs">${SUGGS.map(s=>`<button class="sugg" onclick="useSugg(this)">${esc(s)}</button>`).join('')}</div></div>`;
+}
+function useSugg(b){ $('#ta').value=b.textContent; sendMsg(); }
+function paintMsgs(){
+  const m=$('#msgs'); if(!m)return;
+  m.innerHTML=STATE.msgs.map(x=>`<div class="msg ${x.role==='user'?'user':'ai'}">
+    <div class="av">${x.role==='user'?'我':'C'}</div>
+    <div class="bubble">${x.role==='user'?esc(x.content):md(x.content)}</div></div>`).join('');
+  m.scrollTop=m.scrollHeight;
+}
+async function sendMsg(){
+  const ta=$('#ta'); const text=ta.value.trim(); if(!text)return;
+  if(!STATE.activeId){ toast('请先在「设置」里配置并选用一个 AI'); go('settings'); return; }
+  ta.value=''; ta.style.height='auto';
+  STATE.msgs.push({role:'user',content:text});
+  STATE.msgs.push({role:'assistant',content:'<span class="spinner"></span> 思考中…'}); paintMsgs();
+  try{
+    const r=await api('/chat',{method:'POST',body:JSON.stringify({message:text,session_id:STATE.session})});
+    const wasNew=!STATE.session; STATE.session=r.session_id;
+    STATE.msgs[STATE.msgs.length-1]={role:'assistant',content:r.reply};
+    if(wasNew) loadSessions(); else { const cur=STATE.sessions&&STATE.sessions.find(s=>s.id===STATE.session); if(!cur) loadSessions(); }
+  }catch(e){ STATE.msgs[STATE.msgs.length-1]={role:'assistant',content:'⚠️ '+e.message}; }
+  paintMsgs();
+}
+
+// ── 整理入库（对话 → 真落库，确认后写入）──
+function clearPropose(){ const a=$('#proposeArea'); if(a)a.innerHTML=''; }
+async function tidyToDB(){
+  if(!STATE.session||!STATE.msgs.length){ toast('先聊几句，再整理入库'); return; }
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  const a=$('#proposeArea');
+  a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在整理这段对话…</h4></div>`;
+  try{
+    const d=await api('/chat/propose',{method:'POST',body:JSON.stringify({session_id:STATE.session})});
+    renderPropose(d,'这段对话');
+  }catch(e){ a.innerHTML=`<div class="propose-card"><h4>整理失败</h4><div class="pc-none">${esc(e.message)}</div></div>`; }
+}
+const TYPE_LABEL={create_experience:['新增经历',''],create_project:['新增项目',''],
+  update_project:['更新文档','upd'],create_application:['新增投递','app'],
+  set_application_status:['移动看板','app'],add_interview:['面试反馈','app']};
+function changeDesc(c){
+  switch(c.type){
+    case 'create_experience':return `${esc(c.company||'')} · ${esc(c.role||'')}`+(c.projects&&c.projects.length?`（含 ${c.projects.length} 个项目）`:'');
+    case 'create_project':return esc(c.name||'');
+    case 'update_project':return esc(c.name||('项目 #'+c.project_id))+(c.one_liner?` — ${esc(c.one_liner)}`:'');
+    case 'create_application':return `${esc(c.company||'')} · ${esc(c.role||'')}`;
+    case 'set_application_status':return `投递 #${c.application_id} → ${esc(c.status||'')}`;
+    case 'add_interview':return esc((c.feedback||'').slice(0,40));
+    default:return '';
+  }
+}
+function renderPropose(d, srcLabel){
+  const a=$('#proposeArea'); const changes=d.changes||[];
+  if(!changes.length){
+    a.innerHTML=`<div class="propose-card"><h4>🗂 整理结果</h4>
+      <div class="pc-none">${esc(d.summary&&d.summary!=='无'?d.summary:'这段内容里没有需要入库的新信息。')}</div>
+      <div class="pc-foot"><button class="btn ghost sm" onclick="clearPropose()">知道了</button></div></div>`;
+    return;
+  }
+  STATE._pendingChanges=changes;
+  a.innerHTML=`<div class="propose-card"><h4>🗂 Caddie 建议这样更新（来自${esc(srcLabel)}）</h4>
+    <div style="font-size:12.5px;color:var(--accent-ink);margin-bottom:9px">${esc(d.summary||'')}</div>
+    <div class="pc-list">${changes.map(c=>{const t=TYPE_LABEL[c.type]||[c.type,''];
+      return `<div class="pc-item"><span class="ty ${t[1]}">${t[0]}</span>${changeDesc(c)}
+        ${c.reason?`<div class="why">${esc(c.reason)}</div>`:''}</div>`;}).join('')}</div>
+    <div class="pc-foot">
+      <button class="btn sm" onclick="applyPending()">✅ 应用全部（${changes.length}）</button>
+      <button class="btn ghost sm" onclick="clearPropose()">忽略</button>
+      <span style="margin-left:auto;font-size:11.5px;color:var(--sub)">确认后才真正写入</span>
+    </div></div>`;
+}
+async function applyPending(){
+  const changes=STATE._pendingChanges||[]; if(!changes.length)return;
+  const a=$('#proposeArea'); a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在写入…</h4></div>`;
+  try{
+    const r=await api('/changes/apply',{method:'POST',body:JSON.stringify({changes})});
+    a.innerHTML=`<div class="propose-card"><h4>✅ 已写入</h4>
+      <div class="pc-list">${r.results.map(x=>`<div class="pc-item">${esc(x)}</div>`).join('')}</div>
+      <div class="pc-foot"><button class="btn ghost sm" onclick="clearPropose()">完成</button>
+      <span style="margin-left:auto;font-size:11.5px;color:var(--sub)">去「经历·项目」「投递看板」看看</span></div></div>`;
+    STATE._pendingChanges=null; toast('已更新到数据库');
+    if(STATE.projectOpen){ try{ const np=await api('/projects/'+STATE.projectOpen); STATE._curProj=np; paintDocArea(np); }catch(e){} }
+  }catch(e){ a.innerHTML=`<div class="propose-card"><h4>写入失败</h4><div class="pc-none">${esc(e.message)}</div></div>`; }
+}
+
+// ── 简历 PDF 导入 ──
+async function importResume(e){
+  const f=e.target.files[0]; if(!f)return; e.target.value='';
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  const a=$('#proposeArea');
+  a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在解析「${esc(f.name)}」…</h4></div>`;
+  try{
+    const fd=new FormData(); fd.append('file',f);
+    const r=await fetch('/api/import/resume',{method:'POST',body:fd});
+    if(!r.ok){ let m=r.statusText; try{m=(await r.json()).detail||m}catch(x){} throw new Error(m); }
+    const d=await r.json();
+    renderPropose(d, `简历（读到 ${d.chars||0} 字）`);
+  }catch(err){ a.innerHTML=`<div class="propose-card"><h4>解析失败</h4><div class="pc-none">${esc(err.message)}</div></div>`; }
+}
+
+// ════════ PROJECTS ════════
+async function renderProjects(v){
+  if(STATE.projectOpen) return renderDoc(v, STATE.projectOpen);
+  const exps=await api('/experiences');
+  v.innerHTML=`<div class="view-head" style="display:flex;align-items:flex-end">
+    <div><h1>经历 · 项目</h1><p>每个项目是一份可读可改的文档。点开看详情，跟 AI 探讨后它会帮你更新。</p></div>
+    <div style="margin-left:auto"><button class="btn ghost" onclick="addExperience()">＋ 新增经历</button></div></div>
+    <div id="expList"></div>`;
+  $('#expList').innerHTML = exps.length? exps.map(e=>`<div class="exp">
+    <div class="exp-h"><div><span class="c">${esc(e.company)}</span> <span class="r">· ${esc(e.role)}</span></div>
+      <div class="d">${esc(e.start_date||'')} ~ ${esc(e.end_date||'至今')}</div>
+      <button class="btn ghost sm" style="margin-left:14px" onclick="addProject(${e.id})">＋ 项目</button>
+      <button class="btn danger sm" onclick="delExperience(${e.id})">删</button></div>
+    ${e.projects.map(p=>`<div class="projitem" onclick="openProject(${p.id})">
+      <div style="flex:1"><div class="pn">${esc(p.name)}</div><div class="po">${esc(p.one_liner||'（点开补充一句话亮点）')}</div></div>
+      <div class="tech">${(p.technologies||'').split(/[,，]/).filter(x=>x.trim()).slice(0,3).map(t=>`<span class="tg">${esc(t.trim())}</span>`).join('')}</div>
+      <button class="btn danger sm" style="margin-left:10px" onclick="event.stopPropagation();delProjectList(${p.id})">删</button>
+      </div>`).join('')||'<div class="projitem" style="color:var(--sub)">还没有项目，点右上「＋ 项目」</div>'}
+    </div>`).join('') : '<div style="color:var(--sub)">还没有经历，点右上「＋ 新增经历」开始。</div>';
+}
+async function delExperience(id){ if(!confirm('删除这段经历及其下所有项目？此操作不可撤销。'))return; await api('/experiences/'+id,{method:'DELETE'}); render(); toast('已删除'); }
+async function delProjectList(id){ if(!confirm('删除这个项目？'))return; await api('/projects/'+id,{method:'DELETE'}); render(); toast('已删除'); }
+async function openProject(id){ STATE.projectOpen=id; STATE.editingDoc=false; STATE._pmsgsFor=null; STATE.pmsgs=[]; render(); }
+async function renderDoc(v,id){
+  let p; try{ p=await api('/projects/'+id); }catch(e){ v.innerHTML='<div style="color:var(--sub)">项目不存在</div>'; return; }
+  STATE._curProj=p;
+  v.innerHTML=`
+   <div class="view-head" style="display:flex;align-items:center;gap:12px;position:sticky;top:-26px;z-index:6;background:var(--bg);padding:8px 0 12px;margin:0 0 6px">
+     <button class="btn ghost sm" onclick="closeProject()">← 返回</button>
+     <div style="color:var(--sub);font-size:13px">${esc(p.experience?p.experience.company:'')} · ${esc(p.experience?p.experience.role:'')}</div>
+     <div style="margin-left:auto;display:flex;gap:8px" id="docHeadBtns"></div>
+   </div>
+   <div class="doc-split">
+     <div class="doc-col" id="docArea"></div>
+     <div class="chat-col">
+       <div class="pchat-head"><span>💬 完善这个项目</span>
+         <div class="seg" style="margin-left:auto" id="pmodeSeg">
+           <button class="${(STATE.pchatMode||'organize')==='organize'?'on':''}" style="padding:5px 10px;font-size:11.5px" onclick="setPMode('organize')">✍️ 直接整理</button>
+           <button class="${STATE.pchatMode==='ask'?'on':''}" style="padding:5px 10px;font-size:11.5px" onclick="setPMode('ask')">🔎 追问深挖</button>
+         </div></div>
+       <div class="pmsgs" id="pmsgs"></div>
+       <div id="proposeArea"></div>
+       <div class="composer">
+         <textarea id="pta" placeholder="聊聊这个项目：背景、你具体做了什么、数据结果、技术难点…  (Enter 发送)"></textarea>
+         <div class="composer-bar">
+           <button class="tool" id="pFileBtn" title="上传该项目的资料文件，解析并并入文档">📎 资料</button>
+           <button class="tool" id="pUpdateBtn" title="把这段对话整理进文档，确认后生效">🗂 更新文档</button>
+           <div class="spacer"></div>
+           <button class="send" id="pSend" title="发送">↑</button>
+         </div>
+       </div>
+     </div>
+   </div>
+   <input type="file" id="pFile" accept=".pdf,.txt,.md" hidden>`;
+  paintDocHead(); paintDocArea(p);
+  const pta=$('#pta');
+  pta.addEventListener('input',()=>{pta.style.height='auto';pta.style.height=Math.min(pta.scrollHeight,150)+'px';});
+  pta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendProjMsg(id);}});
+  $('#pSend').onclick=()=>sendProjMsg(id);
+  $('#pUpdateBtn').onclick=()=>projUpdate(id);
+  $('#pFileBtn').onclick=()=>$('#pFile').click();
+  $('#pFile').onchange=(e)=>projImport(e,id);
+  if(STATE._pmsgsFor!==id){ try{ STATE.pmsgs=await api('/projects/'+id+'/messages'); }catch(e){ STATE.pmsgs=[]; } STATE._pmsgsFor=id; }
+  paintPMsgs();
+}
+function paintDocHead(){
+  const el=$('#docHeadBtns'); if(!el)return;
+  el.innerHTML = STATE.editingDoc
+    ? `<button class="btn sm" onclick="saveDoc(${STATE.projectOpen})">💾 保存</button>
+       <button class="btn ghost sm" onclick="cancelEdit()">取消</button>`
+    : `<button class="btn ghost sm" onclick="editDoc()">✏️ 手动编辑</button>`;
+}
+function paintDocArea(p){
+  const a=$('#docArea'); if(!a)return;
+  if(STATE.editingDoc){
+    a.innerHTML=`<div class="doc-view"><textarea class="doc-edit" id="docEdit">${esc(p.document||'')}</textarea>
+      <p style="color:var(--sub);font-size:12px;margin-top:8px">支持 Markdown。保存后自动重建检索索引。</p></div>`;
+  }else{
+    a.innerHTML=`<div class="doc-view">${md(p.document)||'<p style="color:var(--sub)">这份文档还是空的。右边直接和 Caddie 聊这个项目，聊完点「🗂 更新文档」就帮你写好。</p>'}</div>`;
+  }
+}
+function closeProject(){ STATE.projectOpen=null; STATE.editingDoc=false; STATE._pmsgsFor=null; render(); }
+function editDoc(){ STATE.editingDoc=true; paintDocHead(); paintDocArea(STATE._curProj); }
+function cancelEdit(){ STATE.editingDoc=false; paintDocHead(); paintDocArea(STATE._curProj); }
+async function saveDoc(id){
+  const p=STATE._curProj; p.document=$('#docEdit').value;
+  await api('/projects/'+id,{method:'PUT',body:JSON.stringify({name:p.name,one_liner:p.one_liner,document:p.document,technologies:p.technologies,keywords:p.keywords})});
+  STATE.editingDoc=false; paintDocHead(); paintDocArea(p); toast('已保存并重建索引');
+}
+
+// 项目级对话
+function setPMode(m){ STATE.pchatMode=m;
+  document.querySelectorAll('#pmodeSeg button').forEach((b,i)=>b.classList.toggle('on',(i===0)===(m==='organize')));
+  toast(m==='organize'?'切到：直接整理（少反问）':'切到：追问深挖'); }
+function paintPMsgs(){
+  const m=$('#pmsgs'); if(!m)return;
+  if(!STATE.pmsgs||!STATE.pmsgs.length){
+    m.innerHTML=`<div class="pchat-empty">👋 把这个项目讲给我听<br>背景 · 你具体做了什么 · 有什么数据结果<br>我会追问细节，帮你写成有说服力的经历</div>`;
+    return;
+  }
+  m.innerHTML=STATE.pmsgs.map(x=>`<div class="msg ${x.role==='user'?'user':'ai'}">
+    <div class="av">${x.role==='user'?'我':'C'}</div>
+    <div class="bubble">${x.role==='user'?esc(x.content):md(x.content)}</div></div>`).join('');
+  m.scrollTop=m.scrollHeight;
+}
+async function sendProjMsg(id){
+  const ta=$('#pta'); const text=ta.value.trim(); if(!text)return;
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  ta.value=''; ta.style.height='auto';
+  STATE.pmsgs.push({role:'user',content:text});
+  STATE.pmsgs.push({role:'assistant',content:'<span class="spinner"></span> 思考中…'}); paintPMsgs();
+  try{
+    const r=await api('/projects/'+id+'/chat',{method:'POST',body:JSON.stringify({message:text,mode:STATE.pchatMode||'organize'})});
+    STATE.pmsgs[STATE.pmsgs.length-1]={role:'assistant',content:r.reply};
+  }catch(e){ STATE.pmsgs[STATE.pmsgs.length-1]={role:'assistant',content:'⚠️ '+e.message}; }
+  paintPMsgs();
+}
+async function projUpdate(id){
+  if(!STATE.pmsgs||!STATE.pmsgs.length){ toast('先和 Caddie 聊聊这个项目'); return; }
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  const a=$('#proposeArea'); a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在把对话整理进文档…</h4></div>`;
+  try{
+    const d=await api('/projects/'+id+'/propose',{method:'POST'});
+    renderPropose(d,'这个项目的对话');
+  }catch(e){ a.innerHTML=`<div class="propose-card"><h4>整理失败</h4><div class="pc-none">${esc(e.message)}</div></div>`; }
+}
+async function projImport(e,id){
+  const f=e.target.files[0]; if(!f)return; e.target.value='';
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  const a=$('#proposeArea'); a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在解析「${esc(f.name)}」并并入文档…</h4></div>`;
+  try{
+    const fd=new FormData(); fd.append('file',f);
+    const r=await fetch('/api/projects/'+id+'/import',{method:'POST',body:fd});
+    if(!r.ok){ let m=r.statusText; try{m=(await r.json()).detail||m}catch(x){} throw new Error(m); }
+    const d=await r.json();
+    renderPropose(d, `资料「${f.name}」（读到 ${d.chars||0} 字）`);
+  }catch(err){ a.innerHTML=`<div class="propose-card"><h4>解析失败</h4><div class="pc-none">${esc(err.message)}</div></div>`; }
+}
+
+// ════════ BOARD ════════
+async function renderBoard(v){
+  const [d,stats]=await Promise.all([api('/applications'),api('/dashboard')]);
+  const flow=d.flow, labels=d.labels, items=d.items;
+  STATE._board={flow,labels,items};
+  const byStatus=Object.fromEntries(stats.by_status.map(s=>[s.status,s.n]));
+  const view=STATE.boardView||'kanban';
+  v.innerHTML=`<div class="view-head" style="display:flex;align-items:flex-end">
+    <div><h1>投递看板</h1><p>${view==='kanban'?'每条投递的进度一目了然，点卡片按钮推进状态。':'一行一条投递，整体汇总一眼看全。'}</p></div>
+    <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+      <div class="seg">
+        <button class="${view==='kanban'?'on':''}" onclick="setBoardView('kanban')">看板</button>
+        <button class="${view==='table'?'on':''}" onclick="setBoardView('table')">表格</button>
+      </div>
+      <button class="btn" onclick="addApplication()">＋ 新增投递</button></div></div>
+    <div class="stat-row">
+      <div class="stat"><div class="v">${stats.total}</div><div class="k">总投递</div></div>
+      <div class="stat"><div class="v">${byStatus.interview||0}</div><div class="k">面试中</div></div>
+      <div class="stat"><div class="v">${byStatus.offer||0}</div><div class="k">Offer</div></div>
+      <div class="stat" style="flex:1"><div class="k" style="margin-bottom:6px">行业分布</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${stats.by_industry.map(i=>`<span class="tg">${esc(i.industry)} ${i.n}</span>`).join('')||'<span style="color:var(--sub);font-size:12px">暂无</span>'}</div></div>
+    </div>
+    ${view==='table'?boardTable(items,flow,labels):
+      `<div class="board">${flow.map(st=>`<div class="col"><div class="col-h">${esc(labels[st])}<span class="n">${items.filter(a=>a.status===st).length}</span></div>
+        ${items.filter(a=>a.status===st).map(a=>acard(a,flow,labels)).join('')}</div>`).join('')}</div>`}`;
+}
+function setBoardView(v){ STATE.boardView=v; render(); }
+function boardTable(items,flow,labels){
+  if(!items.length) return '<div style="color:var(--sub)">还没有投递，点右上「＋ 新增投递」。</div>';
+  const rows=items.map(a=>{
+    const ivs=a.interviews||[]; const last=ivs[ivs.length-1];
+    const idx=flow.indexOf(a.status); const next=flow[idx+1];
+    const fb=last&&last.feedback?last.feedback:(a.notes||'');
+    return `<tr>
+      <td class="co">${esc(a.company)}</td>
+      <td>${esc(a.role)}</td>
+      <td>${a.industry?`<span class="tg">${esc(a.industry)}</span>`:'<span style="color:var(--sub)">—</span>'}</td>
+      <td>${esc(a.source||'—')}</td>
+      <td style="white-space:nowrap;color:var(--sub)">${esc(a.applied_date||'—')}</td>
+      <td><span class="schip s-${a.status}">${esc(labels[a.status]||a.status)}</span></td>
+      <td style="text-align:center">${ivs.length||'—'}</td>
+      <td><span class="tbl-note" title="${esc(fb)}">${esc(fb||'—')}</span></td>
+      <td style="white-space:nowrap">
+        ${next&&next!=='rejected'?`<button class="btn sm" style="height:26px;padding:0 8px" onclick="moveApp(${a.id},'${next}')">→${esc(labels[next])}</button>`:''}
+        <button class="btn danger sm" style="height:26px;padding:0 7px" onclick="delApp(${a.id})">删</button>
+      </td></tr>`;
+  }).join('');
+  return `<table class="atable"><thead><tr>
+    <th>公司</th><th>岗位</th><th>行业</th><th>渠道</th><th>投递日</th><th>状态</th><th>面试轮</th><th>反馈 / 问题</th><th>操作</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+function acard(a,flow,labels){
+  const idx=flow.indexOf(a.status); const next=flow[idx+1];
+  return `<div class="acard"><div class="co">${esc(a.company)}</div><div class="ro">${esc(a.role)}</div>
+    <div class="mt">${a.industry?`<span class="ind">${esc(a.industry)}</span>`:''}<span>${esc(a.source||'')}</span>
+    <span style="margin-left:auto">${esc(a.applied_date||'')}</span></div>
+    <div class="mt" style="margin-top:9px;gap:6px">
+      ${next&&next!=='rejected'?`<button class="btn sm" style="height:26px;padding:0 9px" onclick="moveApp(${a.id},'${next}')">→ ${esc(labels[next])}</button>`:''}
+      ${a.status!=='rejected'&&a.status!=='offer'?`<button class="btn ghost sm" style="height:26px;padding:0 9px" onclick="moveApp(${a.id},'rejected')">标记未过</button>`:''}
+      <button class="btn danger sm" style="height:26px;padding:0 8px;margin-left:auto" onclick="delApp(${a.id})">删</button>
+    </div></div>`;
+}
+async function moveApp(id,st){ await api('/applications/'+id+'/status',{method:'POST',body:JSON.stringify({status:st})}); render(); }
+async function delApp(id){ if(!confirm('删除这条投递？'))return; await api('/applications/'+id,{method:'DELETE'}); render(); }
+
+// ════════ HISTORY (版本历史) ════════
+async function renderHistory(v){
+  let d; try{ d=await api('/vcs/log'); }catch(e){ v.innerHTML='<div style="color:var(--sub)">版本仓库还没就绪：'+esc(e.message)+'</div>'; return; }
+  const st=d.status, syncTxt = st.remote
+    ? (st.ahead && st.ahead!=='0' ? `☁️ 有 ${st.ahead} 个改动待推送` : '☁️ 已同步到 GitHub')
+    : '仅本地（未接远端）';
+  v.innerHTML=`<div class="view-head" style="display:flex;align-items:flex-end">
+      <div><h1>版本历史</h1>
+        <p>每次改动都自动记录、自动推送。共 <b>${st.commits}</b> 个版本 · ${esc(syncTxt)}${st.remote?' · <code style="font-size:11px">'+esc(st.remote.replace(/^https:\/\//,''))+'</code>':''}</p></div>
+      ${st.remote?'<div style="margin-left:auto"><button class="btn ghost sm" onclick="pushNow(this)">☁️ 立即推送</button></div>':''}
+    </div>
+    <div class="hist-split">
+      <div class="hist-list" id="histList"></div>
+      <div class="hist-detail" id="histDetail"><div class="pchat-empty" style="padding:30px">← 点左边任意一个版本，看那次改了什么</div></div>
+    </div>`;
+  $('#histList').innerHTML = d.log.length ? d.log.map(c=>`<div class="commit" onclick="showCommit('${c.hash}',this)">
+      <div class="cm">${esc(c.msg)}</div><div class="cd">${esc(c.date)} · ${esc(c.hash)}</div></div>`).join('')
+    : '<div style="color:var(--sub)">还没有改动记录。去改点东西，这里就会自动出现版本。</div>';
+}
+async function pushNow(btn){
+  if(btn){ btn.disabled=true; btn.textContent='推送中…'; }
+  try{ await api('/vcs/push',{method:'POST'}); toast('已推送到 GitHub'); render(); }
+  catch(e){ toast('推送失败：'+e.message); if(btn){btn.disabled=false;btn.textContent='☁️ 立即推送';} }
+}
+function renderDiff(t){
+  if(!t||!t.trim()) return '<span style="color:var(--sub)">（这次没有内容差异，可能只改了非文本数据）</span>';
+  return t.split('\n').map(l=>{const e=esc(l);
+    if(l.startsWith('+++')||l.startsWith('---')||l.startsWith('@@')||l.startsWith('diff ')||l.startsWith('index ')) return `<span class="hd">${e}</span>`;
+    if(l.startsWith('+')) return `<span class="add">${e}</span>`;
+    if(l.startsWith('-')) return `<span class="del">${e}</span>`;
+    return `<span>${e}</span>`;
+  }).join('');
+}
+async function showCommit(h,el){
+  document.querySelectorAll('.commit').forEach(c=>c.classList.remove('on')); if(el)el.classList.add('on');
+  const dt=$('#histDetail'); dt.innerHTML='<div style="padding:20px;color:var(--sub)"><span class="spinner"></span> 读取改动…</div>';
+  try{ const d=await api('/vcs/show/'+h);
+    dt.innerHTML=`<div style="font-size:12px;color:var(--sub);padding:8px 2px 10px;border-bottom:1px solid var(--line);margin-bottom:10px;white-space:pre-wrap">${esc(d.stat||'')}</div><div class="diff">${renderDiff(d.diff)}</div>`;
+  }catch(e){ dt.innerHTML='<div style="color:var(--warn);padding:14px">'+esc(e.message)+'</div>'; }
+}
+
+// ════════ SITE (个人网页) ════════
+async function renderSite(v){
+  let d; try{ d=await api('/site'); }catch(e){ d={html:'',meta:{}}; }
+  STATE._site=d;
+  if(!d.html || STATE._siteLoader){ return renderSiteLoader(v); }
+  const m=d.meta||{};
+  v.innerHTML=`<div class="view-head" style="display:flex;align-items:flex-end">
+      <div><h1>个人网页</h1><p>来源：${esc(m.kind||'')} · ${esc(m.source||'')}　·　${m.chars||0} 字${m.updated_at?'　· 上次改于 '+esc(m.updated_at):''}</p></div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn ghost sm" onclick="downloadSite()">⬇ 下载 HTML</button>
+        <button class="btn ghost sm" onclick="siteShowLoader()">↻ 换一个</button>
+      </div></div>
+    <div class="site-split">
+      <div class="site-preview"><iframe id="siteFrame" sandbox="allow-same-origin allow-scripts allow-popups"></iframe></div>
+      <div class="site-side">
+        <div class="lbl">告诉 Caddie 怎么改（可留空，让它对照你 Caddie 里的经历，自动找最该更新的地方）。<b>只改文字内容、不动风格</b>，逐条给你确认。</div>
+        <textarea id="siteInstr" placeholder="例如：把美团 GMV 项目的提升数字更新成最新的；或：根据我最新的经历补充一句简介…"></textarea>
+        <button class="btn" onclick="siteProposeRun()">✦ 生成修改建议</button>
+        <div id="siteProposeArea"></div>
+      </div>
+    </div>`;
+  setSiteFrame(d.html);
+}
+function setSiteFrame(html){ const f=$('#siteFrame'); if(f) f.src='/api/site/raw?t='+Date.now(); }
+function siteShowLoader(){ STATE._siteLoader=true; render(); }
+function renderSiteLoader(v){
+  const guessed='';
+  v.innerHTML=`<div class="view-head"><h1>个人网页</h1>
+    <p>把你的个人网页载入进来，Caddie 对照你的经历帮你改——<b>只改内容、不动风格，每条都要你确认</b>。DeepSeek 不能上网，所以由本地后端读取/抓取。</p></div>
+    <div class="load-grid">
+      <div class="load-card"><b>📄 本地 HTML 文件</b><p>填文件完整路径</p>
+        <input id="sitepath" value="${guessed}" placeholder="/Users/你/.../个人主页.html"><button class="btn sm" onclick="siteLoad('path')">载入</button></div>
+      <div class="load-card"><b>⬆ 上传 HTML</b><p>从电脑选一个 .html</p>
+        <button class="btn ghost sm" onclick="$('#siteUp').click()">选择文件…</button>
+        <input type="file" id="siteUp" accept=".html,.htm" hidden></div>
+      <div class="load-card"><b>🌐 在线网址</b><p>后端帮你抓取页面</p>
+        <input id="siteurl" placeholder="https://..."><button class="btn sm" onclick="siteLoad('url')">抓取</button></div>
+    </div>`;
+  const up=$('#siteUp'); if(up) up.onchange=siteUpload;
+}
+async function siteLoad(type){
+  const value=(type==='path'?$('#sitepath').value:$('#siteurl').value||'').trim();
+  if(!value){ toast('先填一下'); return; }
+  toast('载入中…');
+  try{ await api('/site/load',{method:'POST',body:JSON.stringify({source_type:type,value})});
+    STATE._siteLoader=false; render(); toast('已载入'); }
+  catch(e){ toast(e.message); }
+}
+function siteUpload(e){
+  const f=e.target.files[0]; if(!f)return; e.target.value='';
+  const reader=new FileReader();
+  reader.onload=async()=>{ try{ await api('/site/load',{method:'POST',body:JSON.stringify({source_type:'inline',value:reader.result})});
+    STATE._siteLoader=false; render(); toast('已载入'); }catch(err){ toast(err.message); } };
+  reader.readAsText(f);
+}
+async function siteProposeRun(){
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  const a=$('#siteProposeArea'); a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在对照你的经历生成修改建议…</h4></div>`;
+  try{
+    const d=await api('/site/propose',{method:'POST',body:JSON.stringify({instruction:$('#siteInstr').value.trim()})});
+    renderSiteEdits(d);
+  }catch(e){ a.innerHTML=`<div class="propose-card"><h4>生成失败</h4><div class="pc-none">${esc(e.message)}</div></div>`; }
+}
+function renderSiteEdits(d){
+  const a=$('#siteProposeArea'); const edits=(d.edits||[]).filter(e=>e.found);
+  const bad=(d.edits||[]).filter(e=>!e.found);
+  if(!edits.length){
+    a.innerHTML=`<div class="propose-card"><h4>建议结果</h4>
+      <div class="pc-none">${esc(d.summary||'这次没有可应用的改动。')}${bad.length?'（有 '+bad.length+' 条没能在原文精确定位，已跳过）':''}</div>
+      <div class="pc-foot"><button class="btn ghost sm" onclick="clearSiteProp()">知道了</button></div></div>`;
+    return;
+  }
+  STATE._siteEdits=edits;
+  a.innerHTML=`<div class="propose-card"><h4>✦ 建议这样改（勾选要应用的）</h4>
+    <div style="font-size:12.5px;color:var(--accent-ink);margin-bottom:9px">${esc(d.summary||'')}</div>
+    ${d.style_changed?'<div class="style-warn">⚠ 这次涉及风格/结构改动，请你格外确认是否要动</div>':''}
+    <div style="margin:8px 0">${edits.map((e,i)=>{const del=!(e.replace||'').trim();
+      return `<label class="edit-item" style="display:block;cursor:pointer">
+      <div class="rs"><input type="checkbox" class="site-ck" data-i="${i}" ${del?'':'checked'} style="margin-right:6px;vertical-align:-1px">${esc(e.reason||'')}${del?'<span class="nf">删除</span>':''}</div>
+      <span class="df">${esc((e.find||'').slice(0,120))}</span>
+      <span class="rp">${del?'（删除这段）':'＋ '+esc((e.replace||'').slice(0,120))}</span></label>`;}).join('')}</div>
+    ${bad.length?`<div class="pc-none">另有 ${bad.length} 条没能精确定位，已跳过。</div>`:''}
+    <div class="pc-foot"><button class="btn sm" onclick="applySiteEdits()">✅ 应用勾选项</button>
+      <button class="btn ghost sm" onclick="clearSiteProp()">忽略</button>
+      <span style="margin-left:auto;font-size:11.5px;color:var(--sub)">应用后可下载，不动你原文件</span></div></div>`;
+}
+function clearSiteProp(){ const a=$('#siteProposeArea'); if(a)a.innerHTML=''; }
+async function applySiteEdits(){
+  const all=STATE._siteEdits||[]; if(!all.length)return;
+  const picked=[...document.querySelectorAll('.site-ck:checked')].map(c=>all[+c.dataset.i]);
+  if(!picked.length){ toast('勾选至少一条'); return; }
+  const edits=picked;
+  const a=$('#siteProposeArea'); a.innerHTML=`<div class="propose-card"><h4><span class="spinner"></span> 正在应用…</h4></div>`;
+  try{
+    const r=await api('/site/apply',{method:'POST',body:JSON.stringify({edits})});
+    const nd=await api('/site'); STATE._site=nd; setSiteFrame(nd.html);
+    a.innerHTML=`<div class="propose-card"><h4>✅ 已应用 ${r.applied.length} 处${r.missed.length?'（跳过 '+r.missed.length+'）':''}</h4>
+      <div class="pc-list">${r.applied.map(x=>`<div class="pc-item">${esc(x)}</div>`).join('')}</div>
+      <div class="pc-foot"><button class="btn ghost sm" onclick="clearSiteProp()">完成</button>
+        <button class="btn sm" onclick="downloadSite()">⬇ 下载改后的 HTML</button></div></div>`;
+    STATE._siteEdits=null; toast('已更新预览');
+  }catch(e){ a.innerHTML=`<div class="propose-card"><h4>应用失败</h4><div class="pc-none">${esc(e.message)}</div></div>`; }
+}
+async function downloadSite(){
+  const d=STATE._site||await api('/site');
+  const blob=new Blob([d.html],{type:'text/html'}); const url=URL.createObjectURL(blob);
+  const aa=document.createElement('a'); aa.href=url; aa.download='个人主页_caddie.html'; aa.click();
+  URL.revokeObjectURL(url);
+}
+
+// ════════ Generic modal (experience / project / application) ════════
+let genSaver=null;
+function openGen(title, fields, onSave){
+  $('#genTitle').textContent=title;
+  $('#genBody').innerHTML=fields.map(f=>`<div class="field"><label>${f.label}</label>
+    ${f.type==='select'?`<select id="g_${f.k}">${f.options.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select>`
+    :`<input id="g_${f.k}" placeholder="${f.ph||''}" value="${f.val||''}">`}</div>`).join('');
+  genSaver=onSave; $('#genMask').classList.add('show');
+}
+function closeGen(){ $('#genMask').classList.remove('show'); }
+$('#genSave').onclick=async()=>{ if(genSaver) await genSaver(); };
+function gv(k){ return $('#g_'+k)?$('#g_'+k).value.trim():''; }
+
+function addExperience(){ openGen('新增经历',[
+  {k:'company',label:'公司',ph:'公司名'},{k:'role',label:'角色',ph:'例如 数据分析实习生'},
+  {k:'start_date',label:'开始',ph:'2025-06'},{k:'end_date',label:'结束',ph:'2025-09 或 至今'},
+],async()=>{ if(!gv('company')){toast('填公司');return;}
+  await api('/experiences',{method:'POST',body:JSON.stringify({company:gv('company'),role:gv('role'),start_date:gv('start_date'),end_date:gv('end_date')})});
+  closeGen(); render(); }); }
+
+function addProject(eid){ openGen('新增项目',[
+  {k:'name',label:'项目名'},{k:'one_liner',label:'一句话亮点',ph:'用一句话概括成果'},
+  {k:'technologies',label:'技术/工具',ph:'逗号分隔'},
+],async()=>{ if(!gv('name')){toast('填项目名');return;}
+  await api('/experiences/'+eid+'/projects',{method:'POST',body:JSON.stringify({name:gv('name'),one_liner:gv('one_liner'),technologies:gv('technologies'),document:'# '+gv('name')+'\n\n> '+gv('one_liner')+'\n\n## 背景\n\n## 我做了什么\n\n## 结果\n'})});
+  closeGen(); render(); }); }
+
+function addApplication(){ openGen('新增投递',[
+  {k:'company',label:'公司'},{k:'role',label:'岗位'},{k:'industry',label:'行业',ph:'互联网 / 金融 …'},
+  {k:'source',label:'渠道',ph:'Boss / 内推 / 官网'},
+  {k:'status',label:'当前状态',type:'select',options:[['applied','已投递'],['screening','筛选中'],['written','笔试'],['interview','面试中'],['offer','Offer'],['rejected','未通过']]},
+],async()=>{ if(!gv('company')){toast('填公司');return;}
+  await api('/applications',{method:'POST',body:JSON.stringify({company:gv('company'),role:gv('role'),industry:gv('industry'),source:gv('source'),status:gv('status')})});
+  closeGen(); render(); }); }
+
+// ════════ Search ════════
+let searchTimer=null;
+$('#searchBox').addEventListener('input',e=>{
+  clearTimeout(searchTimer); const q=e.target.value.trim(); const pop=$('#searchPop');
+  if(!q){pop.classList.remove('show');return;}
+  searchTimer=setTimeout(async()=>{
+    try{ const rs=await api('/search?q='+encodeURIComponent(q));
+      pop.innerHTML=rs.length?rs.map(r=>`<div class="sr" onclick="jumpResult('${r.entity_type}',${r.entity_id})">
+        <div class="t"><span class="badge">${r.entity_type==='project'?'项目':r.entity_type}</span>${esc(r.title)}</div>
+        <div class="s">${(r.snippet||'').replace(/《/g,'<mark style="background:#fcf0b4">').replace(/》/g,'</mark>')}</div></div>`).join('')
+        :'<div class="sr" style="color:var(--sub)">没有匹配</div>';
+      pop.classList.add('show');
+    }catch(err){}
+  },200);
+});
+document.addEventListener('click',e=>{ if(!e.target.closest('.search')) $('#searchPop').classList.remove('show'); });
+function jumpResult(type,id){ $('#searchPop').classList.remove('show'); $('#searchBox').value='';
+  if(type==='project'){ go('projects'); openProject(id); } }
+
+// ── boot ──
+(async()=>{ await refreshProviders(); render();
+  if(!STATE.activeId){ $('#topHint').innerHTML='👉 先到「设置」添加一个 AI 供应商'; }
+})();
+</script>
+</body>
+</html>
