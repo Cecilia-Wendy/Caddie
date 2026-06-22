@@ -13,3 +13,8 @@ config.json
 
 # 系统
 .DS_Store
+.Rhistory
+
+# 内部工作文档 / Agent 工作目录（含个人材料，不上传）
+docs/
+.claude/

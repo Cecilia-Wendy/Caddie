@@ -18,10 +18,21 @@ CADDIE_DIR = Path.home() / ".caddie"
 VAULT = CADDIE_DIR / "vault"
 
 
+class _NoGit:
+    """git 不可用时的占位结果，让版本历史功能优雅降级而不是崩溃。"""
+    returncode = 1
+    stdout = ""
+    stderr = "git 未安装"
+
+
 def _run(args):
     # core.quotePath=false 让中文文件名正常显示，不变成八进制转义
-    return subprocess.run(["git", "-c", "core.quotePath=false", *args],
-                          cwd=str(VAULT), capture_output=True, text=True)
+    try:
+        return subprocess.run(["git", "-c", "core.quotePath=false", *args],
+                              cwd=str(VAULT), capture_output=True, text=True)
+    except (FileNotFoundError, OSError):
+        # 本机没装 git（常见于 Windows）：版本历史不可用，但 App 其余功能照常
+        return _NoGit()
 
 
 def _slug(s):
@@ -55,12 +66,28 @@ def _mirror():
                         f"（{e.get('start_date','')} ~ {e.get('end_date','至今')}）")
         for p in e.get("projects", []):
             proj = db.get_project(p["id"]) or {}
-            fn = f"{p['id']:03d}-{_slug(e['company'])}-{_slug(p['name'])}.md"
+            fn = f"{p['id']:03d}.md"   # 稳定文件名（按 id），改名不影响历史追溯
             front = (f"---\n项目: {proj.get('name','')}\n公司: {e['company']}\n"
                      f"一句话: {proj.get('one_liner') or ''}\n"
-                     f"技术: {proj.get('technologies') or ''}\n---\n\n")
+                     f"技术: {proj.get('technologies') or ''}\n"
+                     f"关键词: {proj.get('keywords') or ''}\n---\n\n")
             (pdir / fn).write_text(front + (proj.get("document") or ""), encoding="utf-8")
             overview.append(f"    - {p['name']}  →  projects/{fn}")
+
+    portfolio = db.list_portfolio()
+    if portfolio:
+        overview.append("\n## 个人作品")
+    for p in portfolio:
+        proj = db.get_project(p["id"]) or {}
+        fn = f"{p['id']:03d}.md"
+        front = (f"---\n项目: {proj.get('name','')}\n类型: 个人作品\n"
+                 f"一句话: {proj.get('one_liner') or ''}\n"
+                 f"技术: {proj.get('technologies') or ''}\n"
+                 f"关键词: {proj.get('keywords') or ''}\n"
+                 f"仓库: {proj.get('repo_url') or ''}\n"
+                 f"演示: {proj.get('demo_url') or ''}\n---\n\n")
+        (pdir / fn).write_text(front + (proj.get("document") or ""), encoding="utf-8")
+        overview.append(f"- {p['name']}  →  projects/{fn}")
     (VAULT / "经历总览.md").write_text("\n".join(overview) + "\n", encoding="utf-8")
 
     apps = db.get_applications()
@@ -71,6 +98,23 @@ def _mirror():
                   f"{a.get('source') or ''} | {a.get('applied_date') or ''} | "
                   f"{db.STATUS_LABEL.get(a['status'], a['status'])} |")
     (VAULT / "投递记录.md").write_text("\n".join(al) + "\n", encoding="utf-8")
+
+    idir = VAULT / "面试"
+    idir.mkdir(exist_ok=True)
+    for f in idir.glob("*.md"):
+        f.unlink()
+    for it in db.list_interview_items():
+        kind = {"self_intro": "自我介绍", "project_pitch": "项目话术"}.get(it["kind"], it["kind"])
+        fn = f"{it['id']:03d}-{kind}-{_slug(it.get('title') or '')}.md"
+        head = f"# {it.get('title') or kind}\n\n> 类型：{kind}　目标：{it.get('target') or '通用'}\n\n"
+        (idir / fn).write_text(head + (it.get("content") or ""), encoding="utf-8")
+
+    logs = db.list_work_logs()
+    if logs:
+        ll = ["# 在职日记\n"]
+        for l in logs:
+            ll.append(f"### {l.get('log_date','')}\n{l.get('content') or ''}\n")
+        (VAULT / "在职日记.md").write_text("\n".join(ll), encoding="utf-8")
 
     site = CADDIE_DIR / "site.html"
     if site.exists():
@@ -127,6 +171,48 @@ def show(h: str):
                  "--date=format:%Y-%m-%d %H:%M"]).stdout
     diff = _run(["show", h, "--pretty=format:", "--unified=2"]).stdout
     return {"stat": stat, "diff": diff[:30000]}
+
+
+def _project_path(pid: int) -> str:
+    return f"projects/{int(pid):03d}.md"
+
+
+def project_history(pid: int):
+    """某个项目文档的历史版本列表。"""
+    ensure_repo()
+    r = _run(["log", "--format=%h\x1f%ad\x1f%s", "--date=format:%Y-%m-%d %H:%M",
+              "--", _project_path(pid)])
+    out = []
+    for line in r.stdout.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) == 3:
+            out.append({"hash": parts[0], "date": parts[1], "msg": parts[2]})
+    return out
+
+
+def project_doc_at(pid: int, h: str):
+    """读取某个项目文档在指定版本的内容，拆出 document + 一句话 + 技术 + 关键词。"""
+    ensure_repo()
+    if not re.fullmatch(r"[0-9a-fA-F]{4,40}", h or ""):
+        return None
+    raw = _run(["show", f"{h}:{_project_path(pid)}"]).stdout
+    if not raw:
+        return None
+    document = raw
+    meta = {"one_liner": "", "technologies": "", "keywords": ""}
+    if raw.startswith("---"):
+        end = raw.find("\n---", 3)
+        if end != -1:
+            front = raw[3:end]
+            document = raw[end + 4:].lstrip("\n")
+            for ln in front.splitlines():
+                if ln.startswith("一句话:"):
+                    meta["one_liner"] = ln.split(":", 1)[1].strip()
+                elif ln.startswith("技术:"):
+                    meta["technologies"] = ln.split(":", 1)[1].strip()
+                elif ln.startswith("关键词:"):
+                    meta["keywords"] = ln.split(":", 1)[1].strip()
+    return {"document": document, **meta}
 
 
 def status_summary():
