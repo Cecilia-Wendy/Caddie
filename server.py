@@ -455,6 +455,13 @@ def move_application(aid: int, body: dict):
     return {"ok": True}
 
 
+@app.post("/api/applications/{aid}/track")
+def link_application_track(aid: int, body: dict):
+    db.set_application_track(aid, body.get("track_id"))
+    _commit("关联投递到求职目标" if body.get("track_id") else "解除投递关联")
+    return {"ok": True}
+
+
 @app.delete("/api/applications/{aid}")
 def del_application(aid: int):
     db.delete_application(aid)
@@ -1583,6 +1590,74 @@ def add_gaps_bulk(tid: int, body: dict):
         n += 1
     _commit(f"采纳 {n} 条差距诊断")
     return {"ok": True, "count": n}
+
+
+# ─── 求职目标工作台：针对这个岗位的 AI 对话 + agent 模式 ────────────────────────
+
+TRACK_CHAT_BASE = """你是 Caddie，正在帮用户备战【这一个具体岗位】。这是这个岗位的「作战工作台」——所有面试准备都在这里进行。
+你掌握：这个岗位的 JD 与画像、已诊断出的差距、用户的完整经历/项目/作品、以及从真实面试沉淀的关注点库。
+原则：所有建议都紧扣【这个岗位】和【用户的真实背景】，不说空泛套话；用中文，具体、可执行。"""
+
+TRACK_CHAT_MODES = {
+    "general": "\n本轮是【自由对话】：回答用户关于这个岗位准备的任何问题，主动指出该补什么、怎么讲。",
+    "mock": "\n本轮是【模拟面试】：你扮演这个岗位的面试官，基于 JD 和已知差距提问，一次问一两个，用户回答后简短点评再追问，像真面试。",
+    "pitch": "\n本轮是【打磨话术】：帮用户把某段真实经历组织成适配这个 JD 的讲法，主动用 STAR、突出与岗位的相关性，并标出需要用户补充事实的地方。",
+}
+
+
+def _track_context(t, gaps):
+    parts = [
+        f"【岗位】{t.get('company','')} · {t.get('role') or t.get('target','')}",
+        f"【JD】\n{(t.get('jd') or '（未填写）')[:3500]}",
+    ]
+    if t.get("persona"):
+        parts.append(f"【岗位画像】\n{t['persona']}")
+    if gaps:
+        gl = []
+        sl = {"have": "已具备", "partial": "部分", "missing": "缺"}
+        for g in gaps:
+            gl.append(f"- [{sl.get(g.get('my_status'),'?')}] {g.get('requirement','')}"
+                      + (f"（{g.get('note')}）" if g.get("note") else ""))
+        parts.append("【已诊断差距】\n" + "\n".join(gl))
+    fb = _focus_block()
+    if fb:
+        parts.append(fb)
+    parts.append("【用户完整背景】\n" + _full_career_context(5000))
+    return "\n\n".join(parts)
+
+
+@app.get("/api/job-tracks/{tid}/messages")
+def track_messages(tid: int):
+    return db.get_chat_history(f"track-{tid}", limit=200)
+
+
+@app.post("/api/job-tracks/{tid}/chat")
+def track_chat(tid: int, body: dict):
+    t = db.get_job_track(tid)
+    if not t:
+        raise HTTPException(404, "求职目标不存在")
+    gaps = db.list_track_gaps(tid)
+    sid = f"track-{tid}"
+    history = db.get_chat_history(sid, limit=16)
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    messages.append({"role": "user", "content": body.get("message", "")})
+    mode = body.get("mode", "general")
+    system = TRACK_CHAT_BASE + TRACK_CHAT_MODES.get(mode, TRACK_CHAT_MODES["general"]) + "\n\n" + _track_context(t, gaps)
+    try:
+        reply = ai.chat(messages, system=system, max_tokens=1800)
+    except ai.AIError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"调用 AI 失败：{str(e)[:200]}")
+    db.save_message(sid, "user", body.get("message", ""))
+    db.save_message(sid, "assistant", reply)
+    return {"reply": reply}
+
+
+@app.delete("/api/job-tracks/{tid}/messages")
+def clear_track_chat(tid: int):
+    db.clear_chat(f"track-{tid}")
+    return {"ok": True}
 
 
 ASSET_TYPE_LABEL = {

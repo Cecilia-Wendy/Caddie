@@ -626,6 +626,14 @@ def set_application_status(aid, status):
     conn.commit(); conn.close()
 
 
+def set_application_track(aid, track_id):
+    """把一条投递关联到某个求职目标（track_id=None 解除关联）。"""
+    conn = get_db()
+    conn.execute("UPDATE applications SET track_id=?, updated_at=datetime('now','localtime') WHERE id=?",
+                 (track_id, aid))
+    conn.commit(); conn.close()
+
+
 def delete_application(aid):
     conn = get_db()
     conn.execute("DELETE FROM applications WHERE id=?", (aid,))
@@ -696,6 +704,12 @@ def get_chat_history(session_id, limit=30):
         (session_id, limit)).fetchall()
     conn.close()
     return list(reversed(rows(r)))
+
+
+def clear_chat(session_id):
+    conn = get_db()
+    conn.execute("DELETE FROM chat_messages WHERE session_id=?", (session_id,))
+    conn.commit(); conn.close()
 
 
 # ─── 面试记录 ─────────────────────────────────────────────────────────────────

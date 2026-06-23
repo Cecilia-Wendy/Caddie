@@ -228,7 +228,11 @@
   .pchat-empty{margin:auto;text-align:center;color:var(--sub);font-size:13px;padding:0 10px;line-height:1.7}
   .proj-shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,410px);gap:18px;align-items:start}
   .proj-content{min-width:0}
-  .proj-outline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;padding:0}
+  .project-sticky{position:sticky;top:-26px;z-index:18;background:var(--bg);padding-top:10px;
+    border-bottom:1px solid var(--line);box-shadow:0 8px 14px rgba(37,34,29,.035)}
+  .project-sticky .project-head{margin:0;padding:10px 0 12px;border-bottom:1px solid var(--line)}
+  .project-sticky-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(350px,410px);gap:18px}
+  .proj-outline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0;padding:10px 0 11px;min-height:50px}
   .proj-outline .outline-group{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
   .proj-outline .outline-divider{width:1px;height:22px;background:var(--line);margin:0 4px}
   .proj-kicker{font-size:11px;color:var(--sub);font-weight:600;margin:8px 0 7px}
@@ -246,6 +250,7 @@
     font-size:11.5px;color:var(--sub);background:var(--panel)}
   .project-main{min-width:0}
   .project-main .doc-view{max-width:none}
+  .proj-shell>.chat-col{top:185px;height:calc(100vh - 267px)}
   .follow-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 12px;margin-bottom:12px}
   .follow-title{display:flex;align-items:center;gap:8px;min-width:0}
   .follow-actions{display:flex;align-items:center;gap:7px}
@@ -312,6 +317,7 @@
   .agenda-meta{font-size:11.5px;color:var(--sub);margin-top:3px;line-height:1.45}
   @media(max-width:900px){.calendar-layout{grid-template-columns:1fr}.calendar-day{min-height:78px}.agenda-panel{order:-1}}
   @media(max-width:1120px){
+    .project-sticky-grid{grid-template-columns:minmax(0,1fr)}
     .proj-shell{grid-template-columns:minmax(0,1fr)}
     .proj-shell .chat-col{position:relative;height:min(650px,calc(100vh - 120px))}
   }
@@ -1272,19 +1278,19 @@ async function renderDoc(v,id){
     ? (docHeads&&docHeads.length? docHeads.map(h=>h.replace(/^##\s+/,'').trim()) : ['这是什么','核心功能','技术实现','现状'])
     : ['背景','我的动作','结果'];
   v.innerHTML=`
-   <div class="view-head" style="display:flex;align-items:center;gap:12px;position:sticky;top:-26px;z-index:6;background:var(--bg);padding:10px 0 13px;margin:0 0 14px;border-bottom:1px solid var(--line)">
-     <button class="btn ghost sm" onclick="closeProject()">← 返回</button>
-     <div style="min-width:0"><h1 style="font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name||'项目')}</h1>
-       <div style="color:var(--sub);font-size:12px;margin-top:3px">${p.kind==='personal'?portfolioSubtitle(p):(esc(p.experience?p.experience.company:'')+' · '+esc(p.experience?p.experience.role:'')+' · v当前')}</div></div>
-     ${isP?`<div class="proj-status-pills">${(p.technologies||'').split(/[,，]/).filter(x=>x.trim()).slice(0,4).map(t=>`<span class="tg">${esc(t.trim())}</span>`).join('')}</div>`:`<div class="proj-status-pills">
-       <span class="mini-pill"><span class="status-dot stable"></span>稳 ${cnt.stable}</span>
-       <span class="mini-pill"><span class="status-dot weak"></span>虚 ${cnt.weak}</span>
-       <span class="mini-pill"><span class="status-dot todo"></span>待补 ${cnt.todo}</span>
-     </div>`}
-     <div style="margin-left:auto;display:flex;gap:8px" id="docHeadBtns"></div>
-   </div>
-   <div class="proj-shell">
-     <div class="proj-content">
+   <div class="project-sticky">
+     <div class="view-head project-head" style="display:flex;align-items:center;gap:12px">
+       <button class="btn ghost sm" onclick="closeProject()">← 返回</button>
+       <div style="min-width:0"><h1 style="font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name||'项目')}</h1>
+         <div style="color:var(--sub);font-size:12px;margin-top:3px">${p.kind==='personal'?portfolioSubtitle(p):(esc(p.experience?p.experience.company:'')+' · '+esc(p.experience?p.experience.role:'')+' · v当前')}</div></div>
+       ${isP?`<div class="proj-status-pills">${(p.technologies||'').split(/[,，]/).filter(x=>x.trim()).slice(0,4).map(t=>`<span class="tg">${esc(t.trim())}</span>`).join('')}</div>`:`<div class="proj-status-pills">
+         <span class="mini-pill"><span class="status-dot stable"></span>稳 ${cnt.stable}</span>
+         <span class="mini-pill"><span class="status-dot weak"></span>虚 ${cnt.weak}</span>
+         <span class="mini-pill"><span class="status-dot todo"></span>待补 ${cnt.todo}</span>
+       </div>`}
+       <div style="margin-left:auto;display:flex;gap:8px" id="docHeadBtns"></div>
+     </div>
+     <div class="project-sticky-grid">
        <nav class="proj-outline" aria-label="项目内容导航">
          <div class="outline-group">
            ${projectTabButton('doc','事实文档','')}
@@ -1298,6 +1304,11 @@ async function renderDoc(v,id){
            ${outline.map(x=>`<button class="outline-link" onclick="STATE.projTab='doc';paintProjectMain();setTimeout(()=>scrollDocHeading('${x}'),30)">${esc(x)}</button>`).join('')}
          </div>
        </nav>
+       <div></div>
+     </div>
+   </div>
+   <div class="proj-shell">
+     <div class="proj-content">
        <div class="project-main" id="docArea"></div>
      </div>
      <div class="chat-col">
@@ -2035,14 +2046,14 @@ async function renderTrackDetail(v,id){
           <button class="btn danger sm" onclick="delGap(${g.id})">删</button></div>`}
       </div></div>`;};
   // ① 目标概览
-  const overview=sec('① 目标概览','这个岗位要什么样的人，关联了哪些投递',`
+  const overview=sec('目标概览','这个岗位要什么样的人，关联了哪些投递',`
     ${t.jd?`<details><summary style="cursor:pointer;font-size:13px;color:var(--accent)">查看 JD</summary><div style="white-space:pre-wrap;font-size:13px;color:var(--sub);margin-top:8px;max-height:200px;overflow:auto">${esc(t.jd)}</div></details>`:'<div style="color:var(--sub);font-size:13px">还没填 JD，点右上「编辑」补上，AI 才能诊断差距。</div>'}
     <div style="margin-top:12px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:13px">岗位画像</b><button class="btn ghost sm" onclick="genPersona(${id})">✦ AI 生成</button></div>
       <div style="font-size:13px;color:var(--sub);white-space:pre-wrap">${t.persona?esc(t.persona):'（点「AI 生成」从 JD 提炼这个岗位要什么样的人）'}</div></div>
-    <div style="margin-top:12px"><b style="font-size:13px">关联投递（${apps.length}）</b>
-      <div style="font-size:13px;color:var(--sub);margin-top:5px">${apps.length?apps.map(a=>`${esc(a.company)} · ${esc(a.role||'')}（${esc((STATE._board&&STATE._board.labels&&STATE._board.labels[a.status])||a.status)}）`).join('<br>'):'暂无关联投递。'}</div></div>`);
+    <div style="margin-top:12px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:13px">关联投递（${apps.length}）</b><button class="btn ghost sm" onclick="linkAppPicker(${id})">＋ 关联</button></div>
+      <div style="font-size:13px;color:var(--sub)">${apps.length?apps.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0"><span style="flex:1">${esc(a.company)} · ${esc(a.role||'')}（${esc((STATE._board&&STATE._board.labels&&STATE._board.labels[a.status])||a.status)}）</span><button class="btn ghost sm" onclick="unlinkApp(${a.id})">解除</button></div>`).join(''):'这条求职线还没关联投递。一条线 = 一个具体岗位（如「申万宏源·产品运营」），关联上它的投递记录，状态会同步显示。'}</div></div>`);
   // ② 差距诊断
-  const diag=sec('② 差距诊断','对比 JD 和你的背景，AI 诊断你缺什么',`
+  const diag=sec('差距诊断','对比 JD 和你的背景，AI 诊断你缺什么',`
     <button class="btn" onclick="diagnoseGaps(${id})">✦ AI 诊断差距</button>
     <button class="btn ghost" style="margin-left:8px" onclick="addGap(${id})">＋ 手动加一条</button>
     ${STATE._gapPreview?`<div style="margin-top:14px;border:1px solid var(--accent);border-radius:12px;padding:14px">
@@ -2057,17 +2068,17 @@ async function renderTrackDetail(v,id){
   const planCol=(key,label,hint)=>`<div style="flex:1;min-width:200px"><div style="font-weight:600;font-size:13px;margin-bottom:2px">${label}</div>
     <div style="font-size:11.5px;color:var(--sub);margin-bottom:8px">${hint}</div>
     ${byPlan[key].length?byPlan[key].map(g=>`<div style="font-size:12.5px;padding:7px 9px;background:var(--bg);border:1px solid var(--line);border-radius:9px;margin-bottom:6px">${esc(g.requirement||'')}</div>`).join(''):'<div style="font-size:12px;color:var(--sub)">暂无</div>'}</div>`;
-  const plan=sec('③ 补齐计划','差距分三条路补：补知识会反哺资料库，补作品联动作品集',`
+  const plan=sec('补齐计划','差距分三条路补：补知识会反哺资料库，补作品联动作品集',`
     <div style="display:flex;gap:16px;flex-wrap:wrap">
       ${planCol('knowledge','📚 补知识','沉淀成知识卡 → 入资料库')}
       ${planCol('portfolio','🛠️ 补作品','去作品集做个 side project')}
       ${planCol('pitch','🎤 补话术','把现有经历往这个 JD 上讲')}
     </div>`);
   // ④ 定制资产
-  const custom=sec('④ 定制资产','为这个目标生成的简历 / 自我介绍 / 项目话术',
+  const custom=sec('定制资产','为这个目标生成的简历 / 自我介绍 / 项目话术',
     assets.length?assets.map(a=>`<div style="font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)">${esc(a.title||a.asset_type)} · v${a.version||1}</div>`).join(''):'<div style="color:var(--sub);font-size:13px">暂无定制资产。后续可在这里按目标生成简历/自我介绍。</div>');
   // ⑤ 面试准备
-  const prep=sec('⑤ 面试安排与准备','先把真实时间排进日历，再围绕这个岗位准备',`
+  const prep=sec('面试安排与准备','先把真实时间排进日历，再围绕这个岗位准备',`
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       ${app?`<button class="btn sm" onclick="openInterviewForm(${app.id})">＋ 安排面试</button>`:'<span style="font-size:12.5px;color:var(--sub)">这条线尚未关联投递，关联后才能安排真实面试。</span>'}
       <button class="btn ghost sm" onclick="go('interview')">去模拟面试</button>
@@ -2085,7 +2096,7 @@ async function renderTrackDetail(v,id){
         <button class="btn danger sm" onclick="deleteInterviewSchedule(${x.id})">删</button>
       </div></div>`).join('')}</div>`:'<div style="font-size:12.5px;color:var(--sub)">还没有面试时间。收到邀约后点「安排面试」，它会出现在日历里。</div>'}`);
   // ⑥ 准备度
-  const ready=sec('⑥ 准备度',null,`
+  const ready=sec('准备度',null,`
     <div style="display:flex;align-items:center;gap:14px">
       <div style="font-size:30px;font-weight:700">${rd}%</div>
       <div style="flex:1"><div style="height:10px;background:var(--chip);border-radius:99px;overflow:hidden"><div style="height:100%;width:${rd}%;background:var(--accent)"></div></div>
@@ -2099,8 +2110,62 @@ async function renderTrackDetail(v,id){
         <button class="btn ghost sm" onclick='editTrack(${JSON.stringify(t)})'>✏️ 编辑</button>
         <button class="btn danger sm" onclick="delTrack(${id})">删除</button></div>
     </div>
-    <div style="max-width:760px">${overview}${diag}${plan}${custom}${prep}${ready}</div>`;
+    ${ready}
+    <div class="proj-shell" style="grid-template-columns:minmax(0,1fr) 384px;gap:18px;align-items:start;margin-top:14px">
+      <div>${overview}${diag}${plan}${prep}${custom}</div>
+      <div class="chat-col" style="position:sticky;top:8px">
+        <div class="pchat-head"><span>🎯 备战 ${esc(t.company||t.target||'这个岗位')}</span>
+          <div class="seg" style="margin-left:auto" id="tmodeSeg">
+            <button class="${(STATE.trackMode||'general')==='general'?'on':''}" style="padding:5px 9px;font-size:11.5px" onclick="setTrackMode('general')">💬 对话</button>
+            <button class="${STATE.trackMode==='mock'?'on':''}" style="padding:5px 9px;font-size:11.5px" onclick="setTrackMode('mock')">🎤 模拟面试</button>
+            <button class="${STATE.trackMode==='pitch'?'on':''}" style="padding:5px 9px;font-size:11.5px" onclick="setTrackMode('pitch')">✍️ 打磨话术</button>
+          </div>
+          <button class="btn ghost sm" style="height:26px;padding:0 8px" onclick="clearTrackChat(${id})">清空</button></div>
+        <div class="pmsgs" id="tmsgs"></div>
+        <div class="composer">
+          <textarea id="tta" placeholder="问 Caddie 怎么准备这个岗位、让它模拟面试、或一起打磨话术…（Enter 发送）"></textarea>
+          <div class="composer-bar"><div class="spacer"></div><button class="send" id="tSend" title="发送">↑</button></div>
+        </div>
+      </div>
+    </div>`;
+  paintTrackMsgs();
+  const tta=$('#tta');
+  if(tta){
+    tta.addEventListener('input',()=>{tta.style.height='auto';tta.style.height=Math.min(tta.scrollHeight,150)+'px';});
+    tta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTrackMsg(id);}});
+    $('#tSend').onclick=()=>sendTrackMsg(id);
+  }
+  if(STATE._tmsgsFor!==id){
+    try{ STATE.tmsgs=await api('/job-tracks/'+id+'/messages'); }catch(e){ STATE.tmsgs=[]; }
+    STATE._tmsgsFor=id; paintTrackMsgs();
+  }
 }
+function setTrackMode(m){ STATE.trackMode=m; render(); }
+function paintTrackMsgs(){
+  const m=$('#tmsgs'); if(!m)return;
+  const msgs=STATE.tmsgs||[]; const t=STATE._curTrack||{};
+  if(!msgs.length){
+    m.innerHTML=`<div class="pchat-empty">👋 这是「${esc(t.company||t.target||'这个岗位')}」的备战台<br>问我怎么准备 · 让我模拟面试 · 一起打磨话术<br>我知道这个 JD、你的真实背景和已诊断的差距</div>`;
+    return;
+  }
+  m.innerHTML=msgs.map(x=>`<div class="msg ${x.role==='user'?'user':'ai'}">
+    <div class="av">${x.role==='user'?'我':'C'}</div>
+    <div class="bubble">${x.role==='user'?esc(x.content):md(x.content)}</div></div>`).join('');
+  m.scrollTop=m.scrollHeight;
+}
+async function sendTrackMsg(tid){
+  if(!STATE.activeId){ toast('请先在「设置」配置 AI'); go('settings'); return; }
+  const ta=$('#tta'); const txt=(ta.value||'').trim(); if(!txt)return;
+  ta.value=''; ta.style.height='auto';
+  STATE.tmsgs=STATE.tmsgs||[]; STATE.tmsgs.push({role:'user',content:txt});
+  STATE.tmsgs.push({role:'assistant',content:'…'}); paintTrackMsgs();
+  try{ const r=await api('/job-tracks/'+tid+'/chat',{method:'POST',body:JSON.stringify({message:txt,mode:STATE.trackMode||'general'})});
+    STATE.tmsgs[STATE.tmsgs.length-1]={role:'assistant',content:r.reply};
+  }catch(e){ STATE.tmsgs[STATE.tmsgs.length-1]={role:'assistant',content:'出错了：'+e.message}; }
+  paintTrackMsgs();
+}
+async function clearTrackChat(tid){ if(!confirm('清空这个目标的对话？'))return;
+  await api('/job-tracks/'+tid+'/messages',{method:'DELETE'}); STATE.tmsgs=[]; STATE._tmsgsFor=tid; paintTrackMsgs(); }
 async function genPersona(id){ if(!STATE.activeId){toast('请先配置 AI');go('settings');return;} toast('生成中…');
   try{ await api('/job-tracks/'+id+'/persona',{method:'POST'}); render(); toast('已生成岗位画像'); }
   catch(e){ toast('失败：'+e.message); } }
@@ -2120,6 +2185,16 @@ function addGap(id){ openGen('手动加一条差距',[
 async function cycleGap(gid,cur){ const next={todo:'doing',doing:'done',done:'todo'}[cur||'todo'];
   await api('/gaps/'+gid,{method:'PUT',body:JSON.stringify({status:next})}); render(); }
 async function delGap(gid){ await api('/gaps/'+gid,{method:'DELETE'}); render(); }
+async function linkAppPicker(tid){
+  const d=await api('/applications'); const items=d.items||[];
+  const free=items.filter(a=>!a.track_id || a.track_id===tid);
+  if(!free.length){ toast('没有可关联的投递，先去「投递看板」加一条'); return; }
+  openGen('关联投递到这个目标',[
+    {k:'aid',label:'选一条投递',type:'select',options:free.map(a=>[String(a.id), a.company+' · '+(a.role||'')+'（'+((d.labels&&d.labels[a.status])||a.status)+'）'])},
+  ],async()=>{ const aid=gv('aid'); if(!aid)return;
+    await api('/applications/'+aid+'/track',{method:'POST',body:JSON.stringify({track_id:tid})});
+    closeGen(); render(); toast('已关联'); }); }
+async function unlinkApp(aid){ await api('/applications/'+aid+'/track',{method:'POST',body:JSON.stringify({track_id:null})}); render(); toast('已解除'); }
 
 // ════════ BOARD ════════
 async function renderBoard(v){
