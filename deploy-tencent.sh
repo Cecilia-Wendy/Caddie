@@ -67,6 +67,8 @@ printf 'DEEPSEEK_API_KEY=%s\n' "$API_KEY" > "$ENV_FILE"
 printf 'CADDIE_GATEWAY_TESTERS_JSON={"tester-01":{"token":"%s","daily_calls":50,"daily_tokens":300000}}\n' "$TESTER_TOKEN" >> "$ENV_FILE"
 printf 'DEEPSEEK_MODEL=deepseek-chat\nCADDIE_GATEWAY_DATA_DIR=/data\n' >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+printf '%s\n' "$TESTER_TOKEN" > "$GATEWAY_DIR/tester-01.token"
+chmod 600 "$GATEWAY_DIR/tester-01.token"
 unset API_KEY
 
 docker build --tag caddie-hosted-gateway:0.2.0 "$GATEWAY_DIR"
@@ -124,5 +126,5 @@ echo
 echo "CADDIE_GATEWAY_DEPLOYED"
 echo "Base URL: https://${PUBLIC_HOST}/gateway/v1"
 echo "Model: deepseek-chat"
-echo "Tester 01 token: ${TESTER_TOKEN}"
-echo "Keep this token private. The DeepSeek API key was not printed."
+echo "Tester credential saved at: ${GATEWAY_DIR}/tester-01.token"
+echo "The tester credential and DeepSeek API key were not printed."
