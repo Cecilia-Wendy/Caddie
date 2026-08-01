@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Single-color macOS template mark; color is inherited from the host. -->
+  <path fill="currentColor" fill-rule="evenodd" d="
+    M46.5 15.5A23 23 0 1 0 46.5 48.5L40.7 42.7
+    A14.7 14.7 0 1 1 40.7 21.3Z
+    M28.5 29h2.2v6h-2.2z
+    M33.3 29h2.2v6h-2.2z"/>
+</svg>

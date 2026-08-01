@@ -1,0 +1,5 @@
+<svg role="img" viewBox="0 0 128 40" xmlns="http://www.w3.org/2000/svg">
+  <title>DiDi</title>
+  <path fill="#FF7A18" d="M3 11.5C3 7.9 5.9 5 9.5 5H38v8H12.5c-.8 0-1.5.7-1.5 1.5v7c0 7.5 6.1 13.5 13.5 13.5S38 29 38 21.5V17h8v4.5C46 33.4 36.4 43 24.5 43S3 33.4 3 21.5v-10Z" transform="scale(.82) translate(2 -1)"/>
+  <text x="44" y="29" fill="#22252A" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="-1">DiDi</text>
+</svg>

@@ -1,0 +1,27 @@
+Caddie Alpha for Windows
+========================
+
+系统要求
+
+- Windows 10 或 Windows 11，64 位
+- 推荐安装 Microsoft Edge WebView2 Runtime（多数 Windows 10/11 已自带）
+
+使用方法
+
+1. 解压完整的 Caddie-Windows 文件夹，不要只把 Caddie.exe 单独拖出来。
+2. 双击 Caddie.exe。
+3. 若 Windows SmartScreen 显示“Windows 已保护你的电脑”，点击“更多信息”，
+   核对应用名称为 Caddie 后点击“仍要运行”。
+4. 按首次引导选择应用内 API、连接 Claude/Codex，或暂时不用 AI。
+
+数据与隐私
+
+- 数据默认保存在：%USERPROFILE%\.caddie\
+- 删除程序文件夹不会删除本地职业资料。
+- API Key 仅保存在本机。
+- 匿名使用分析默认关闭，当前 Alpha 即使开启也不会上传云端。
+
+注意
+
+当前邀请测试版尚未购买 Windows 代码签名证书，因此首次运行可能出现 SmartScreen
+提醒。不要关闭 Windows Defender 或系统全局安全设置。

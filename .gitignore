@@ -2,18 +2,32 @@
 __pycache__/
 *.py[cod]
 .venv/
+.models/
 venv/
 *.egg-info/
+frontend/**/node_modules/
 
 # 本地运行数据 / 密钥（绝不上传）
 *.db
 config.json
 /data/
+.demo-data/
 ~/.caddie/
 
 # 系统
 .DS_Store
 .Rhistory
+
+# 本机生成的 macOS 启动器（包含本地路径，保留在电脑上）
+Caddie.app/
+scripts/CaddieLauncher.applescript
+scripts/CaddieLauncher.js
+build/
+dist/
+.release-private/
+scripts/ingest_interview_reviews.py
+outputs/
+output/
 
 # 内部工作文档 / Agent 工作目录（含个人材料，不上传）
 docs/

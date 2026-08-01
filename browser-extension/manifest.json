@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Caddie 网申采集器",
+  "version": "0.3.0",
+  "description": "将网申编辑表单或只读简历页按原结构保存到本地 Caddie。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:8766/*"],
+  "action": {
+    "default_title": "保存网申到 Caddie",
+    "default_popup": "popup.html"
+  }
+}

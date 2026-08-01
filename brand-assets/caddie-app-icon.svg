@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="150" y1="90" x2="870" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F1F5FF"/>
+    </linearGradient>
+    <linearGradient id="main" x1="250" y1="210" x2="705" y2="810" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A8BFF"/>
+      <stop offset=".5" stop-color="#3370FF"/>
+      <stop offset="1" stop-color="#255BE0"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="660" y1="355" x2="730" y2="475" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B7CEFF"/>
+      <stop offset="1" stop-color="#79A4FF"/>
+    </linearGradient>
+    <filter id="markShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#1749BE" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#bg)"/>
+  <g filter="url(#markShadow)" transform="translate(51.2 51.2) scale(.9)">
+    <path fill="url(#main)" fill-rule="evenodd" d="M744 252A366 366 0 1 0 744 772L651 679A234 234 0 1 1 651 345Z"/>
+    <path fill="url(#accent)" d="M651 345L744 252V405L695 438L651 411Z"/>
+    <path fill="#2459DB" opacity=".22" d="M651 679L744 772V620L695 587L651 613Z"/>
+    <rect x="456" y="475" width="30" height="70" rx="15" fill="#3370FF"/>
+    <rect x="538" y="475" width="30" height="70" rx="15" fill="#3370FF"/>
+  </g>
+</svg>

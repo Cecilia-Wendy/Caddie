@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160">
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="3840" y2="2160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFF"/>
+      <stop offset=".52" stop-color="#EEF3FF"/>
+      <stop offset="1" stop-color="#E2EAFF"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="1180" y1="500" x2="2600" y2="1750" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A8BFF"/>
+      <stop offset=".5" stop-color="#3370FF"/>
+      <stop offset="1" stop-color="#255BE0"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="50" stdDeviation="60" flood-color="#1B4EC1" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#canvas)"/>
+  <circle cx="3400" cy="250" r="620" fill="#3370FF" opacity=".055"/>
+  <circle cx="350" cy="2010" r="760" fill="#79A4FF" opacity=".09"/>
+  <g transform="translate(1408 568)" filter="url(#shadow)">
+    <path fill="url(#blue)" fill-rule="evenodd" d="M744 252A366 366 0 1 0 744 772L651 679A234 234 0 1 1 651 345Z"/>
+    <path fill="#95B7FF" d="M651 345L744 252V405L695 438L651 411Z"/>
+    <path fill="#2459DB" opacity=".22" d="M651 679L744 772V620L695 587L651 613Z"/>
+    <rect x="456" y="475" width="30" height="70" rx="15" fill="#3370FF"/>
+    <rect x="538" y="475" width="30" height="70" rx="15" fill="#3370FF"/>
+  </g>
+</svg>

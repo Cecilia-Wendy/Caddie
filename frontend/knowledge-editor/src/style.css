@@ -1,0 +1,22 @@
+:root {
+  --bn-colors-editor-text: #1f2329;
+  --bn-colors-editor-background: #ffffff;
+  --bn-colors-menu-background: #ffffff;
+  --bn-colors-menu-text: #1f2329;
+  --bn-colors-tooltip-background: #1f2329;
+  --bn-colors-tooltip-text: #ffffff;
+  --bn-colors-hovered-background: #f2f3f5;
+  --bn-colors-selected-background: #e8f0ff;
+  --bn-colors-disabled-background: #f5f6f7;
+  --bn-colors-disabled-text: #8f959e;
+  --bn-colors-shadow: #1f23291f;
+  --bn-colors-border: #e5e6e8;
+  --bn-border-radius: 6px;
+  --bn-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.bn-container[data-theming-css-variables-demo] { font-family: var(--bn-font-family); }
+.bn-editor { padding: 18px 12px 100px 42px; min-height: 560px; font-size: 15px; line-height: 1.75; }
+.bn-block-content[data-content-type="heading"] { letter-spacing: 0; }
+.bn-side-menu { color: #8f959e; }
+.mantine-Menu-dropdown, .mantine-Popover-dropdown { border-color: #e5e6e8; box-shadow: 0 8px 28px #1f23291f; }

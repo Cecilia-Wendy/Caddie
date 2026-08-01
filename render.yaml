@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: caddie
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: CADDIE_ALLOW_REMOTE
+        value: "1"
+      - key: CADDIE_DATA_DIR
+        value: /data
+    disk:
+      name: caddie-data
+      mountPath: /data
+      sizeGB: 10
