@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: caddie-hosted-alpha-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: CADDIE_GATEWAY_TESTERS_JSON
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: CADDIE_GATEWAY_DATA_DIR
+        value: /data
+    disk:
+      name: caddie-gateway-usage
+      mountPath: /data
+      sizeGB: 1
