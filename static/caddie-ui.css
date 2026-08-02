@@ -565,6 +565,29 @@ body:has(.app.settings-mode) > .notify-stack { z-index: 430; }
 .top-ai-command:hover img { transform:scale(1.04); }
 .top-ai-command:active { transform:translateY(1px); background:#eaf0ff; }
 .top-ai-command:active img { transform:scale(.96); }
+.topbar-update { position:relative;flex:0 0 auto; }
+.topbar-update-trigger { position:relative;color:#2563eb;background:#edf3ff; }
+.topbar-update-trigger:hover { color:#174dbd;background:#e3edff; }
+.topbar-update-trigger svg { width:15px;height:15px; }
+.topbar-update-dot { position:absolute;right:5px;top:5px;width:6px;height:6px;border:1.5px solid #fff;border-radius:50%;background:#ef5b4c;box-sizing:content-box; }
+.topbar-update-pop { display:none;position:absolute;right:0;top:36px;width:310px;padding:14px;border:1px solid #dce3ef;border-radius:10px;background:#fff;box-shadow:0 16px 42px rgba(27,42,70,.16);z-index:145; }
+.topbar-update-pop.show { display:block; }
+.topbar-update-head { display:flex;align-items:center;gap:10px; }
+.topbar-update-head>span { width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:#edf3ff;color:#2563eb; }
+.topbar-update-head>span svg { width:17px;height:17px; }
+.topbar-update-head>div { flex:1;min-width:0; }
+.topbar-update-head small,.topbar-update-head b { display:block; }
+.topbar-update-head small { color:#7b8493;font-size:10.5px;margin-bottom:2px; }
+.topbar-update-head b { color:#263244;font-size:13px; }
+.topbar-update-head>button { width:26px;height:26px;display:grid;place-items:center;border-radius:6px;color:#9299a5; }
+.topbar-update-head>button:hover { background:#f3f5f8;color:#4d5664; }
+.topbar-update-head>button svg { width:14px;height:14px; }
+.topbar-update-pop>p { margin:12px 0;color:#626d7c;font-size:11.5px;line-height:1.6; }
+.topbar-update-foot { display:flex;align-items:center;gap:10px;padding-top:11px;border-top:1px solid #edf0f4; }
+.topbar-update-foot>span { flex:1;color:#9299a5;font-size:9.5px;line-height:1.4; }
+.topbar-update-foot>button { height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 11px;border-radius:7px;background:#3370ff;color:#fff;font-size:11.5px;font-weight:650; }
+.topbar-update-foot>button:hover { background:#2862e4; }
+.topbar-update-foot>button svg { width:14px;height:14px; }
 .topbar-more { position:relative;flex:0 0 auto;margin-right:2px; }
 .topbar-menu {
   display:none;

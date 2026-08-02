@@ -101,6 +101,16 @@ class UpdaterTests(unittest.TestCase):
         self.assertIn("update-manifest-hosted-alpha.json", channel["manifest_url"])
         self.assertIn('"bundle_id": "app.caddie.hosted-alpha"', signer)
 
+    def test_global_update_indicator_checks_in_background(self):
+        root = Path(__file__).parents[1]
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        css = (root / "static" / "caddie-ui.css").read_text(encoding="utf-8")
+        self.assertIn('id="topbarUpdate" hidden', html)
+        self.assertIn("window.setTimeout(()=>checkGlobalUpdate(),1400)", html)
+        self.assertIn("window.addEventListener('focus',()=>checkGlobalUpdate())", html)
+        self.assertIn("installCaddieUpdate()", html)
+        self.assertIn(".topbar-update-dot", css)
+
 
 if __name__ == "__main__":
     unittest.main()

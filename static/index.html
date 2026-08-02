@@ -1981,6 +1981,12 @@
       <button class="topbar-icon top-ai-command" type="button" onclick="event.preventDefault();event.stopPropagation();toggleCaddieWorkspace()" title="打开 / 返回 Caddie" aria-label="打开或返回 Caddie">
         <img src="/static/caddie-mascot.png?v=20260728-3" alt="" aria-hidden="true">
       </button>
+      <div class="topbar-update" id="topbarUpdate" hidden>
+        <button class="topbar-icon topbar-update-trigger" type="button" onclick="toggleTopbarUpdate(event)" title="发现新版本" aria-label="发现 Caddie 新版本">
+          <i data-lucide="download"></i><span class="topbar-update-dot" aria-hidden="true"></span>
+        </button>
+        <div class="topbar-update-pop" id="topbarUpdatePop" role="dialog" aria-label="Caddie 应用更新"></div>
+      </div>
       <div class="topbar-more">
         <button class="topbar-icon" type="button" onclick="toggleTopbarMenu(event)" title="更多" aria-label="更多操作"><i data-lucide="ellipsis"></i></button>
         <div class="topbar-menu" id="topbarMenu">
@@ -2275,7 +2281,7 @@ let STATE={view:['chat','guide','home','tracks','projects','profile','knowledge'
   interviewTab:'focus', mockMsgs:[], mockSession:null, mockTarget:'', _introDraft:null, _introEditId:null, _introTarget:'', _introTitle:'', focusJob:null,
   companyOpen:null, companyDetailTab:'overview', companyKnowledgeDoc:null, companyKnowledgeFolder:null, trackReturnCompany:null, trackDetailTab:'overview', trackAssistantOpen:false, trackContextOpen:true, expandedTrackMsgs:{}, trackPending:null, trackAssetDoc:null, trackAssetEditing:false,
   spaceAgentOpen:false,spaceAgentRun:null,spaceAgentBusy:false,spaceAgentInstruction:'',spaceAgentRunToken:0,agentIntent:'learn',agentConversationId:null,
-  objectAgent:null,knowledgeReadMode:false,knowledgeView:'overview',knowledgeShelfIds:null,knowledgeOutlineCollapsed:{},trackKnowledgeSort:localStorage.getItem('caddie-track-knowledge-sort')||'updated_desc',knNavCollapsed:false,knOutlineCollapsed:false,knFocusExpanded:false,knNavWidth:Math.max(250,+localStorage.getItem('caddie-kn-nav-width')||280),knOutlineWidth:Math.max(210,+localStorage.getItem('caddie-kn-outline-width')||230),sidebarExpanded:false};
+  objectAgent:null,knowledgeReadMode:false,knowledgeView:'overview',knowledgeShelfIds:null,knowledgeOutlineCollapsed:{},trackKnowledgeSort:localStorage.getItem('caddie-track-knowledge-sort')||'updated_desc',knNavCollapsed:false,knOutlineCollapsed:false,knFocusExpanded:false,knNavWidth:Math.max(250,+localStorage.getItem('caddie-kn-nav-width')||280),knOutlineWidth:Math.max(210,+localStorage.getItem('caddie-kn-outline-width')||230),sidebarExpanded:false,updateNotice:null,updateChecking:false};
 // Small public bridge for focused modules loaded after this monolithic page script.
 // It intentionally exposes state only; the existing render/API helpers stay local.
 window.CaddieState=STATE;
@@ -11523,13 +11529,43 @@ function closeGlobalSearch(){
 }
 function toggleTopbarMenu(event){
   event?.stopPropagation();
-  closeTopbarCreate();
+  closeTopbarCreate();closeTopbarUpdate();
   $('#topbarMenu')?.classList.toggle('show');
 }
 function closeTopbarMenu(){ $('#topbarMenu')?.classList.remove('show'); }
+function toggleTopbarUpdate(event){
+  event?.stopPropagation();
+  closeTopbarMenu();closeTopbarCreate();
+  $('#topbarUpdatePop')?.classList.toggle('show');
+}
+function closeTopbarUpdate(){ $('#topbarUpdatePop')?.classList.remove('show'); }
+function paintTopbarUpdate(){
+  const shell=$('#topbarUpdate'),pop=$('#topbarUpdatePop'),data=STATE.updateNotice,manifest=data?.manifest||{};
+  const available=!!data?.available;
+  if(!shell||!pop)return;
+  shell.hidden=!available;
+  if(!available){pop.classList.remove('show');return;}
+  pop.innerHTML=`<div class="topbar-update-head"><span><i data-lucide="sparkles"></i></span><div><small>发现新版本</small><b>Caddie ${esc(manifest.version||'')}</b></div><button type="button" onclick="closeTopbarUpdate()" aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <p>${esc(manifest.release_notes||'包含稳定性改进与体验优化。')}</p>
+    <div class="topbar-update-foot"><span>更新前会自动备份本地数据</span><button type="button" onclick="closeTopbarUpdate();installCaddieUpdate()"><i data-lucide="download"></i>下载并安装</button></div>`;
+  window.lucide&&lucide.createIcons({attrs:{'stroke-width':1.8}});
+}
+async function checkGlobalUpdate(force=false){
+  const interval=4*60*60*1000,last=Number(localStorage.getItem('caddie-update-last-check')||0);
+  if(!force&&Date.now()-last<interval)return;
+  if(STATE.updateChecking)return;
+  STATE.updateChecking=true;
+  try{
+    const data=await api('/update/check',{method:'POST'});
+    localStorage.setItem('caddie-update-last-check',String(Date.now()));
+    STATE.updateNotice=data;
+    paintTopbarUpdate();
+  }catch(_){ /* Background update checks never interrupt active work. */ }
+  finally{STATE.updateChecking=false;}
+}
 function toggleTopbarCreate(event){
   event?.stopPropagation();
-  closeTopbarMenu();
+  closeTopbarMenu();closeTopbarUpdate();
   $('#topbarCreateMenu')?.classList.toggle('show');
 }
 function closeTopbarCreate(){ $('#topbarCreateMenu')?.classList.remove('show'); }
@@ -11588,7 +11624,9 @@ document.addEventListener('click',e=>{
   }
   if(!e.target.closest('.topbar-more'))closeTopbarMenu();
   if(!e.target.closest('.topbar-create'))closeTopbarCreate();
+  if(!e.target.closest('.topbar-update'))closeTopbarUpdate();
 });
+window.addEventListener('focus',()=>checkGlobalUpdate());
 window.addEventListener('resize',scheduleProjectChatFit);
 function jumpResult(type,id){ $('#searchPop').classList.remove('show'); $('#searchBox').value='';
   if(type==='project')openProject(id); }
@@ -11771,7 +11809,7 @@ async function submitProductFeedback(){
 }
 
 // ── boot ──
-(async()=>{ await Promise.all([refreshProviders(),refreshProductFeatures()]);syncTopbarShortcuts();const root=navRootFor(STATE.view);document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===root)); render(); await maybeShowOnboarding();
+(async()=>{ await Promise.all([refreshProviders(),refreshProductFeatures()]);syncTopbarShortcuts();const root=navRootFor(STATE.view);document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===root)); render(); window.setTimeout(()=>checkGlobalUpdate(),1400);window.setInterval(()=>checkGlobalUpdate(true),4*60*60*1000); await maybeShowOnboarding();
   if(!STATE.activeId){ $('#topHint').innerHTML='👉 先到「设置」添加一个 AI 供应商'; }
 })();
 </script>
