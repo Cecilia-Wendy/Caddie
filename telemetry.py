@@ -425,6 +425,16 @@ def upload_pending() -> dict:
             response.raise_for_status()
             delivered_ids = event_ids
     except requests.RequestException as exc:
+        response_detail = ""
+        response = getattr(exc, "response", None)
+        if response is not None:
+            try:
+                response_detail = (response.text or "").strip()[:500]
+            except Exception:
+                response_detail = ""
+        error_message = str(exc)
+        if response_detail:
+            error_message = f"{error_message} | Supabase: {response_detail}"
         conn = db.get_db()
         conn.executemany(
             "UPDATE telemetry_queue SET status='pending' WHERE event_id=?",
@@ -436,12 +446,12 @@ def upload_pending() -> dict:
         )
         conn.commit()
         conn.close()
-        _record_upload_status(f"failed: {str(exc)[:160]}")
+        _record_upload_status(f"failed: {error_message[:160]}")
         return {
             "ok": False,
             "status": "failed",
             "uploaded": len(delivered_ids),
-            "error": str(exc),
+            "error": error_message,
         }
 
     conn = db.get_db()

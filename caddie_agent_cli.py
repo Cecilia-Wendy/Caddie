@@ -34,7 +34,7 @@ def _workflow_guide() -> dict:
             {"step": 1, "action": "doctor", "result": "验证连接、读取权限与稳定 ID"},
             {"step": 2, "action": "context / search / read", "result": "只读取完成任务所需的上下文"},
             {"step": 3, "action": "start-run", "result": "在 Caddie 登记本次外部 Agent 工作"},
-            {"step": 4, "action": "save-document / propose-job / propose-interview", "result": "保存草稿或提交待确认候选"},
+            {"step": 4, "action": "save-document / propose-experience / propose-profile / propose-job / propose-interview", "result": "保存草稿或提交待确认候选"},
             {"step": 5, "action": "complete", "result": "结束运行；候选进入 Caddie 的 Agent 更新区"},
             {"step": 6, "action": "package", "result": "查看用户是否确认、编辑或拒绝"},
             {"step": 7, "action": "changes", "result": "续接前读取用户后续修改，避免覆盖新版"},
@@ -42,7 +42,7 @@ def _workflow_guide() -> dict:
         "write_rules": {
             "draft": "低风险工作稿可直接保存，但不是确认事实。",
             "career_document": "指定岗位目录时必须写到对应目录候选，不能用通用草稿代替。",
-            "facts_and_feedback": "事实、数字、贡献边界和反馈约束必须由用户确认。",
+            "facts_and_feedback": "事实、数字、贡献边界和反馈约束必须由用户确认。简历迁移应使用经历和个人资料专用候选。",
             "job_and_calendar": "岗位状态与面试排期只能提交候选，确认后才生效。",
         },
         "examples": [
@@ -126,6 +126,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("task_id", type=int); p.add_argument("--text", required=True); p.add_argument("--scope", default="global"); p.add_argument("--scope-id", type=int)
     p.add_argument("--category"); p.add_argument("--polarity"); p.add_argument("--strength"); p.add_argument("--directive"); p.add_argument("--reason", default="")
     p.add_argument("--agent-key", default="external_agent")
+
+    p = sub.add_parser("propose-experience", help="提交从简历拆出的经历候选（确认后进入我的经历）")
+    p.add_argument("task_id", type=int); p.add_argument("--company", required=True); p.add_argument("--role", required=True)
+    p.add_argument("--start-date"); p.add_argument("--end-date"); p.add_argument("--location")
+    p.add_argument("--description", default=""); p.add_argument("--evidence"); p.add_argument("--reason", default="")
+    p.add_argument("--agent-key", default="external_agent")
+
+    p = sub.add_parser("propose-profile", help="提交从简历拆出的个人资料候选（JSON 字段）")
+    p.add_argument("task_id", type=int); p.add_argument("--changes", required=True)
+    p.add_argument("--evidence"); p.add_argument("--reason", default=""); p.add_argument("--agent-key", default="external_agent")
 
     p = sub.add_parser("propose-knowledge", help="提议创建岗位准备文档（确认后才写入）")
     p.add_argument("task_id", type=int); p.add_argument("--track-id", required=True, type=int)
@@ -249,6 +259,17 @@ def main() -> None:
         result = caddie_mcp.propose_fact(values["task_id"], values["subject_type"], values["predicate"], values["value"], values["subject_id"], values["scope_type"], values["scope_id"], values["confidence"], _json(values["evidence"], []), values["reason"], values["agent_key"])
     elif command == "propose-feedback":
         result = caddie_mcp.propose_feedback(values["task_id"], values["text"], values["scope"], values["scope_id"], values["category"], values["polarity"], values["strength"], values["directive"], values["reason"], values["agent_key"])
+    elif command == "propose-experience":
+        result = caddie_mcp.propose_experience(
+            values["task_id"], values["company"], values["role"], values["start_date"],
+            values["end_date"], values["location"], values["description"],
+            _json(values["evidence"], []), values["reason"], values["agent_key"],
+        )
+    elif command == "propose-profile":
+        result = caddie_mcp.propose_user_profile(
+            values["task_id"], _json(values["changes"]), _json(values["evidence"], []),
+            values["reason"], values["agent_key"],
+        )
     elif command == "propose-knowledge":
         result = caddie_mcp.propose_track_knowledge_document(
             values["task_id"], values["track_id"], values["title"], values["body"], values["folder"],

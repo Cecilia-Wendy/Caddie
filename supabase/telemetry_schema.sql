@@ -47,6 +47,35 @@ create table if not exists public.telemetry_events (
     platform text not null default 'macos' check (platform = 'macos')
 );
 
+-- Existing alpha projects may still have the first-release CHECK constraints.
+-- Recreate them so newer coarse events can be inserted without recreating the
+-- table or weakening the insert-only RLS policy.
+alter table public.telemetry_events
+    drop constraint if exists telemetry_events_event_name_check;
+alter table public.telemetry_events
+    add constraint telemetry_events_event_name_check check (
+        event_name in (
+            'analytics_consent_updated', 'onboarding_started',
+            'onboarding_completed', 'product_tour_completed', 'view_opened',
+            'source_added', 'source_ingested', 'job_track_created',
+            'asset_generated', 'asset_saved', 'feedback_submitted',
+            'proposed_change_accepted', 'proposed_change_rejected',
+            'app_started', 'feature_action_completed', 'ai_call_completed',
+            'external_agent_tool_completed'
+        )
+    );
+
+alter table public.telemetry_events
+    drop constraint if exists telemetry_events_entity_type_check;
+alter table public.telemetry_events
+    add constraint telemetry_events_entity_type_check check (
+        entity_type is null or entity_type in (
+            'source', 'job_track', 'asset', 'product_feedback',
+            'proposed_change', 'experience', 'project', 'knowledge_item',
+            'agent_task', 'interview', 'application'
+        )
+    );
+
 create index if not exists idx_telemetry_events_name_time
     on public.telemetry_events(event_name, server_time);
 

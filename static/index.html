@@ -7618,8 +7618,14 @@ async function deleteCalendarItem(id){
   if(!confirm('删除这条日程？此操作不会删除关联岗位。'))return;
   await api('/calendar-items/'+id,{method:'DELETE'});toast('日程已删除');render();
 }
-function exportCalendarToApple(dateFrom,dateTo){window.location.href=`/api/calendar/export.ics?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`;}
-function exportCalendarItemToApple(kind,id){window.location.href=`/api/calendar/export.ics?item_kind=${encodeURIComponent(kind)}&item_id=${id}`;}
+async function exportCalendarToApple(dateFrom,dateTo){
+  try{const r=await api(`/calendar/open-apple?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`,{method:'POST'});toast(`已交给 Apple 日历导入 ${r.event_count||0} 项安排`);}
+  catch(e){toast('日历同步失败：'+e.message);}
+}
+async function exportCalendarItemToApple(kind,id){
+  try{await api(`/calendar/open-apple?item_kind=${encodeURIComponent(kind)}&item_id=${id}`,{method:'POST'});toast('已打开 Apple 日历，请确认添加');}
+  catch(e){toast('日历同步失败：'+e.message);}
+}
 function openCalendarItem(trackId,opportunityId){
   rememberCalendarOrigin();
   if(trackId){openTrack(trackId,false,true);return;}
@@ -9513,7 +9519,7 @@ async function completeHomeEmailReminder(messageKey){
 function agentUpdateStateLabel(task){
   const pending=(task.changes||[]).filter(x=>x.status==='pending').length;
   if(pending)return `${pending} 项待确认`;
-  return ({active:'进行中',queued:'等待执行',review:'等待确认',completed:'已归档',failed:'执行失败',cancelled:'已取消'})[task.status]||task.status||'已更新';
+  return ({active:'进行中',queued:'等待执行',review:'等待确认',completed:'处理完成',failed:'执行失败',cancelled:'已取消'})[task.status]||task.status||'已更新';
 }
 function renderHomeAgentUpdates(tasks){
   const visible=(tasks||[]).filter(t=>!['cancelled'].includes(t.status)).slice(0,5);
@@ -9530,8 +9536,8 @@ async function openAgentArtifact(type,id,trackId){
   }
   render();
 }
-function agentUpdateActionLabel(action){return ({create_fact:'事实候选',create_feedback:'反馈约束',create_asset:'资产',create_followup:'项目追问',create_track_knowledge:'岗位准备文档',update_knowledge:'知识文档',update_project_document:'项目文档'})[action]||'候选修改';}
-function agentUpdateRiskText(action){return ({create_fact:'确认后才会进入事实库',create_feedback:'确认后才会影响后续生成',create_asset:'确认后会归档为岗位资产',create_followup:'确认后会进入项目题库',create_track_knowledge:'确认后会写入指定岗位的准备目录',update_knowledge:'确认后才会改写原文',update_project_document:'确认后才会改写原文'})[action]||'确认后才会写入 Caddie';}
+function agentUpdateActionLabel(action){return ({create_fact:'事实候选',create_experience:'经历候选',update_user_profile:'个人资料',create_feedback:'反馈约束',create_asset:'资产',create_followup:'项目追问',create_track_knowledge:'岗位准备文档',update_knowledge:'知识文档',update_project_document:'项目文档'})[action]||'候选修改';}
+function agentUpdateRiskText(action){return ({create_fact:'确认后才会进入事实库',create_experience:'确认后会创建经历，并把详细描述保存为经历项目',update_user_profile:'确认后才会更新个人信息',create_feedback:'确认后才会影响后续生成',create_asset:'确认后会归档为岗位资产',create_followup:'确认后会进入项目题库',create_track_knowledge:'确认后会写入指定岗位的准备目录',update_knowledge:'确认后才会改写原文',update_project_document:'确认后才会改写原文'})[action]||'确认后才会写入 Caddie';}
 function renderAgentUpdateChanges(taskId,changes){
   if(!changes.length)return '<div class="src-empty">没有待确认的修改。已确认内容会保留在相应的资料、资产或反馈约束中。</div>';
   return changes.map(c=>{

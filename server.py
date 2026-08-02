@@ -16,6 +16,7 @@ import difflib
 import shlex
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 import zipfile
@@ -4754,6 +4755,27 @@ class ExternalFactProposalIn(BaseModel):
     agent_key: str = "external_agent"
 
 
+class ExternalExperienceProposalIn(BaseModel):
+    task_id: int
+    company: str
+    role: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    location: Optional[str] = None
+    description: str = ""
+    evidence: list[dict] = Field(default_factory=list)
+    reason: str = ""
+    agent_key: str = "external_agent"
+
+
+class ExternalProfileProposalIn(BaseModel):
+    task_id: int
+    changes: dict
+    evidence: list[dict] = Field(default_factory=list)
+    reason: str = ""
+    agent_key: str = "external_agent"
+
+
 class ExternalFeedbackProposalIn(BaseModel):
     task_id: int
     original_text: str
@@ -7302,6 +7324,43 @@ def export_caddie_calendar(
         media_type="text/calendar; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+@app.post("/api/calendar/open-apple")
+def open_caddie_calendar_in_apple(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    item_kind: Optional[str] = None,
+    item_id: Optional[int] = None,
+):
+    """Create an ICS file locally and hand it to Calendar.app.
+
+    A WebView download is not a reliable way to invoke Calendar.app in a
+    packaged desktop build, so the local server performs the native handoff.
+    """
+    if sys.platform != "darwin":
+        raise HTTPException(400, "当前仅支持同步到 macOS Apple 日历")
+    response = export_caddie_calendar(date_from, date_to, item_kind, item_id)
+    content = bytes(response.body)
+    if b"BEGIN:VEVENT" not in content:
+        raise HTTPException(400, "没有可同步且时间有效的日程")
+    target_dir = Path(tempfile.gettempdir()) / "caddie-calendar"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    suffix = f"-{item_kind or 'all'}-{item_id}" if item_id is not None else "-all"
+    target = target_dir / f"Caddie{suffix}.ics"
+    target.write_bytes(content)
+    try:
+        proc = subprocess.run(
+            ["open", "-a", "Calendar", str(target)],
+            capture_output=True, text=True, timeout=20,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(408, "打开 Apple 日历超时") from exc
+    except Exception as exc:
+        raise HTTPException(500, f"无法打开 Apple 日历：{str(exc)[:160]}") from exc
+    if proc.returncode != 0:
+        raise HTTPException(500, (proc.stderr or proc.stdout or "Apple 日历打开失败").strip()[:300])
+    return {"ok": True, "opened": True, "event_count": content.count(b"BEGIN:VEVENT")}
 
 
 @app.post("/api/calendar-items")
@@ -13357,6 +13416,60 @@ def propose_external_fact(body: ExternalFactProposalIn):
     return {"change_id": change_id, "requires_confirmation": True}
 
 
+@app.post("/api/agent/proposals/experience")
+def propose_external_experience(body: ExternalExperienceProposalIn):
+    run_id = _external_run_for_task(body.task_id, body.agent_key)
+    if not body.company.strip() or not body.role.strip():
+        raise HTTPException(400, "经历候选必须包含单位和角色")
+    metadata = {
+        "company": body.company.strip(), "role": body.role.strip(),
+        "start_date": body.start_date, "end_date": body.end_date,
+        "location": body.location, "description": body.description.strip(),
+        "evidence": body.evidence, "agent_key": body.agent_key,
+    }
+    change_id = db.create_proposed_change({
+        "task_id": body.task_id, "run_id": run_id,
+        "action_type": "create_experience", "target_type": "experience",
+        "proposed_title": f"{body.company.strip()} · {body.role.strip()}",
+        "proposed_content": body.description.strip() or "创建经历记录",
+        "reason": body.reason.strip() or "从简历中拆出的经历候选",
+        "scope_type": "global", "metadata_json": json.dumps(metadata, ensure_ascii=False),
+    })
+    db.update_agent_task(body.task_id, status="review")
+    db.create_agent_event({
+        "task_id": body.task_id, "run_id": run_id, "event_type": "review",
+        "label": "提交经历候选", "detail": "等待用户确认后写入我的经历", "status": "done",
+    })
+    _commit("外部 Agent 提交经历候选")
+    return {"change_id": change_id, "requires_confirmation": True}
+
+
+@app.post("/api/agent/proposals/profile")
+def propose_external_profile(body: ExternalProfileProposalIn):
+    run_id = _external_run_for_task(body.task_id, body.agent_key)
+    allowed = set(UserProfileIn().model_dump())
+    changes = {key: value for key, value in (body.changes or {}).items() if key in allowed}
+    if not changes:
+        raise HTTPException(400, "个人资料候选没有可写入字段")
+    metadata = {"changes": changes, "evidence": body.evidence, "agent_key": body.agent_key}
+    labels = "、".join(changes.keys())
+    change_id = db.create_proposed_change({
+        "task_id": body.task_id, "run_id": run_id,
+        "action_type": "update_user_profile", "target_type": "user_profile",
+        "proposed_title": f"更新个人资料：{labels}",
+        "proposed_content": json.dumps(changes, ensure_ascii=False, indent=2),
+        "reason": body.reason.strip() or "从简历中拆出的个人资料候选",
+        "scope_type": "global", "metadata_json": json.dumps(metadata, ensure_ascii=False),
+    })
+    db.update_agent_task(body.task_id, status="review")
+    db.create_agent_event({
+        "task_id": body.task_id, "run_id": run_id, "event_type": "review",
+        "label": "提交个人资料候选", "detail": "等待用户确认后更新个人信息", "status": "done",
+    })
+    _commit("外部 Agent 提交个人资料候选")
+    return {"change_id": change_id, "requires_confirmation": True}
+
+
 @app.post("/api/agent/proposals/feedback")
 def propose_external_feedback(body: ExternalFeedbackProposalIn):
     run_id = _external_run_for_task(body.task_id, body.agent_key)
@@ -14697,7 +14810,7 @@ def apply_agent_task(task_id: int, body: AgentTaskApplyIn):
         "create_followup", "update_followup", "create_global_knowledge",
         "create_track_knowledge", "update_knowledge", "update_project_document",
         "create_asset", "create_fact", "create_feedback", "update_job_record",
-        "change_interview_schedule",
+        "change_interview_schedule", "create_experience", "update_user_profile",
     }
     for change in selected:
         action = change.get("action_type")
@@ -14744,6 +14857,14 @@ def apply_agent_task(task_id: int, body: AgentTaskApplyIn):
                 metadata = {}
             if not metadata.get("subject_type") or not metadata.get("predicate") or not (change.get("proposed_content") or "").strip():
                 raise HTTPException(400, "事实候选缺少主体、字段或内容")
+        elif action == "create_experience":
+            metadata = _json_loads_safe(change.get("metadata_json"), {}) or {}
+            if not str(metadata.get("company") or "").strip() or not str(metadata.get("role") or "").strip():
+                raise HTTPException(400, "经历候选缺少单位或角色")
+        elif action == "update_user_profile":
+            metadata = _json_loads_safe(change.get("metadata_json"), {}) or {}
+            if not isinstance(metadata.get("changes"), dict) or not metadata.get("changes"):
+                raise HTTPException(400, "个人资料候选没有可写入字段")
         elif action == "create_feedback":
             if not (change.get("proposed_content") or "").strip():
                 raise HTTPException(400, "反馈候选内容为空")
@@ -14801,6 +14922,45 @@ def apply_agent_task(task_id: int, body: AgentTaskApplyIn):
     results = []
     applied_labels = []
     for change in selected:
+        if change.get("action_type") == "create_experience":
+            metadata = _json_loads_safe(change.get("metadata_json"), {}) or {}
+            experience_id = db.create_experience({
+                "company": str(metadata.get("company") or "").strip(),
+                "role": str(metadata.get("role") or "").strip(),
+                "start_date": metadata.get("start_date"), "end_date": metadata.get("end_date"),
+                "location": metadata.get("location"),
+            })
+            project_id = None
+            description = str(metadata.get("description") or "").strip()
+            if description:
+                project_id = db.create_project(experience_id, {
+                    "name": "工作内容与成果", "one_liner": description.splitlines()[0][:200],
+                    "document": description, "technologies": "", "keywords": "简历导入,外部Agent",
+                })
+            db.update_proposed_change(change["id"], "applied", target_id=experience_id)
+            _workspace_event("experience_confirmed", "experience", experience_id,
+                             "确认简历经历", "global", None, actor_type="user",
+                             payload={"task_id": task_id, "project_id": project_id})
+            results.append({"change_id": change["id"], "experience_id": experience_id, "project_id": project_id})
+            applied_labels.append("经历")
+            continue
+
+        if change.get("action_type") == "update_user_profile":
+            metadata = _json_loads_safe(change.get("metadata_json"), {}) or {}
+            current = get_user_profile()["profile"]
+            allowed = set(UserProfileIn().model_dump())
+            patch = {key: value for key, value in (metadata.get("changes") or {}).items() if key in allowed}
+            merged = {**current, **patch}
+            validated = UserProfileIn(**merged)
+            update_user_profile(validated)
+            db.update_proposed_change(change["id"], "applied")
+            _workspace_event("user_profile_confirmed", "user_profile", None,
+                             "确认个人资料更新", "global", None, actor_type="user",
+                             payload={"task_id": task_id, "fields": sorted(patch)})
+            results.append({"change_id": change["id"], "profile_fields": sorted(patch)})
+            applied_labels.append("个人资料")
+            continue
+
         if change.get("action_type") == "update_job_record":
             metadata = _json_loads_safe(change.get("metadata_json"), {}) or {}
             track_id = metadata.get("track_id") or change.get("target_id")

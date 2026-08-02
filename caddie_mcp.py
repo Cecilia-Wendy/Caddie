@@ -975,6 +975,62 @@ def propose_fact(task_id: int, subject_type: str, predicate: str, value_text: st
 
 
 @mcp.tool()
+@_track_external_tool("propose_experience", "propose")
+def propose_experience(task_id: int, company: str, role: str,
+                       start_date: str | None = None, end_date: str | None = None,
+                       location: str | None = None, description: str = "",
+                       evidence: list[dict] | None = None, reason: str = "",
+                       agent_key: str = "external_agent") -> dict:
+    """Propose one resume experience. Confirmation creates a real Experience record."""
+    if not company.strip() or not role.strip():
+        raise ValueError("company and role are required")
+    run_id = _external_run_for_task(task_id, agent_key)
+    metadata = {
+        "company": company.strip(), "role": role.strip(), "start_date": start_date,
+        "end_date": end_date, "location": location, "description": description.strip(),
+        "evidence": evidence or [], "agent_key": agent_key,
+    }
+    change_id = db.create_proposed_change({
+        "task_id": task_id, "run_id": run_id, "action_type": "create_experience",
+        "target_type": "experience", "proposed_title": f"{company.strip()} · {role.strip()}",
+        "proposed_content": description.strip() or "创建经历记录",
+        "reason": reason.strip() or "从简历中拆出的经历候选", "scope_type": "global",
+        "metadata_json": json.dumps(metadata, ensure_ascii=False),
+    })
+    db.update_agent_task(task_id, status="review")
+    db.create_agent_event({"task_id": task_id, "run_id": run_id, "event_type": "review",
+                           "label": "提交经历候选", "detail": "等待用户确认后写入我的经历", "status": "done"})
+    _commit("外部 Agent 提交经历候选")
+    return {"task_id": task_id, "run_id": run_id, "change_id": change_id, "requires_confirmation": True}
+
+
+@mcp.tool()
+@_track_external_tool("propose_user_profile", "propose")
+def propose_user_profile(task_id: int, changes: dict, evidence: list[dict] | None = None,
+                         reason: str = "", agent_key: str = "external_agent") -> dict:
+    """Propose structured personal-profile fields extracted from a resume."""
+    allowed = {"name", "preferred_name", "email", "phone", "location", "target_roles",
+               "target_locations", "education", "bio"}
+    clean = {key: value for key, value in (changes or {}).items() if key in allowed}
+    if not clean:
+        raise ValueError("changes has no supported user-profile fields")
+    run_id = _external_run_for_task(task_id, agent_key)
+    metadata = {"changes": clean, "evidence": evidence or [], "agent_key": agent_key}
+    change_id = db.create_proposed_change({
+        "task_id": task_id, "run_id": run_id, "action_type": "update_user_profile",
+        "target_type": "user_profile", "proposed_title": "更新个人资料：" + "、".join(clean.keys()),
+        "proposed_content": json.dumps(clean, ensure_ascii=False, indent=2),
+        "reason": reason.strip() or "从简历中拆出的个人资料候选", "scope_type": "global",
+        "metadata_json": json.dumps(metadata, ensure_ascii=False),
+    })
+    db.update_agent_task(task_id, status="review")
+    db.create_agent_event({"task_id": task_id, "run_id": run_id, "event_type": "review",
+                           "label": "提交个人资料候选", "detail": "等待用户确认后更新个人信息", "status": "done"})
+    _commit("外部 Agent 提交个人资料候选")
+    return {"task_id": task_id, "run_id": run_id, "change_id": change_id, "requires_confirmation": True}
+
+
+@mcp.tool()
 @_track_external_tool("propose_feedback", "propose")
 def propose_feedback(task_id: int, original_text: str, scope: str = "global", scope_id: int | None = None,
                      category: str | None = None, polarity: str | None = None, strength: str | None = None,
