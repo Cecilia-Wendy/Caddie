@@ -1,8 +1,8 @@
-"""Privacy-first, local-only product telemetry for the Caddie Alpha.
+"""Privacy-first product telemetry for the Caddie Alpha.
 
-The first release never uploads events.  This module intentionally accepts only
-registered event properties and stores coarse product metadata in SQLite.
-Career content, prompts, file paths and personal identifiers are rejected.
+Events are queued locally before a background worker uploads registered,
+coarse-grained metadata. Career content, prompts, file paths and personal
+identifiers are rejected.
 """
 from __future__ import annotations
 
@@ -64,8 +64,10 @@ SENSITIVE_KEYS = {
 SAFE_VALUE = re.compile(r"^[a-zA-Z0-9_.:+-]{0,80}$")
 UPLOAD_BATCH_SIZE = 50
 UPLOAD_INTERVAL_SECONDS = 300
+UPLOAD_DEBOUNCE_SECONDS = 2
 _uploader_started = False
 _uploader_lock = threading.Lock()
+_upload_wakeup = threading.Event()
 
 
 def duration_bucket(milliseconds: int | float | None) -> str:
@@ -285,6 +287,9 @@ def log_event(
     finally:
         if conn is not None:
             conn.close()
+    # Wake the single background worker instead of creating a network thread
+    # for every product action.
+    _upload_wakeup.set()
     return event_id
 
 
@@ -468,12 +473,17 @@ def upload_pending() -> dict:
 def _uploader_loop():
     time.sleep(2)
     while True:
+        # Coalesce a short burst of related UI events into one cloud request.
+        _upload_wakeup.clear()
+        time.sleep(UPLOAD_DEBOUNCE_SECONDS)
         try:
             upload_pending()
         except Exception:
             # Product telemetry must never interrupt the local application.
             pass
-        time.sleep(UPLOAD_INTERVAL_SECONDS)
+        # New events upload promptly; the timeout is a recovery sweep for
+        # offline or previously failed batches.
+        _upload_wakeup.wait(UPLOAD_INTERVAL_SECONDS)
 
 
 def start_uploader():

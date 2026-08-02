@@ -3179,9 +3179,10 @@ async function loadPrivacySettings(showEvents=false){
     const d=await api('/telemetry/settings');
     let events=[];
     if(showEvents){const r=await api('/telemetry/events?limit=30');events=r.items||[];}
-    const uploadState=d.last_upload_status==='success'||d.last_upload_status==='current'?'已同步':d.last_upload_status?.startsWith('failed')?'同步失败':'尚未同步';
+    const uploadFailed=d.last_upload_status?.startsWith('failed');
+    const uploadState=d.last_upload_status==='success'||d.last_upload_status==='current'?'自动同步完成':uploadFailed?'自动同步失败，将后台重试':'等待自动同步';
     el.innerHTML=`<div class="privacy-row"><span class="foundation-dot ready" style="margin-top:4px"></span><div><b>必要的匿名产品分析已启用</b><p>只上传功能名称、成功状态、匿名安装 ID 和粗粒度数量，不记录简历、JD、项目正文、AI 对话、文件名、路径或联系方式。你仍可查看或清空这台电脑上的事件副本。</p></div></div>
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);flex-wrap:wrap"><span>版本 ${esc(d.app_version||'Alpha')}</span><span>·</span><span>本地 ${Number(d.local_count||0)} 条</span><span>·</span><span>待同步 ${Number(d.pending_count||0)} 条</span><span>·</span><span>${esc(uploadState)}</span><div style="flex:1"></div>${d.enabled?'<button class="btn ghost sm" onclick="uploadTelemetryNow()">立即同步</button>':''}<button class="btn ghost sm" onclick="loadPrivacySettings(true)">查看记录</button>${d.local_count?'<button class="btn ghost sm" onclick="clearTelemetryEvents()">清空记录</button>':''}</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);flex-wrap:wrap"><span>版本 ${esc(d.app_version||'Alpha')}</span><span>·</span><span>本地 ${Number(d.local_count||0)} 条</span><span>·</span><span>待上传 ${Number(d.pending_count||0)} 条</span><span>·</span><span>${esc(uploadState)}</span><div style="flex:1"></div>${uploadFailed?'<button class="btn ghost sm" onclick="uploadTelemetryNow()">重试上传</button>':''}<button class="btn ghost sm" onclick="loadPrivacySettings(true)">查看记录</button>${d.local_count?'<button class="btn ghost sm" onclick="clearTelemetryEvents()">清空记录</button>':''}</div>
       ${showEvents?`<div class="telemetry-events">${events.length?events.map(x=>`<div class="telemetry-event"><b>${esc(x.event_name)}</b><span>${esc(JSON.stringify(x.properties||{}))}</span><time>${esc(x.client_time||'')}</time></div>`).join(''):'<div class="settings-empty">还没有本地使用记录。</div>'}</div>`:''}`;
   }catch(e){el.innerHTML='<div class="settings-empty">隐私设置暂时不可用。</div>';}
 }

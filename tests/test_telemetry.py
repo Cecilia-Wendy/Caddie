@@ -128,6 +128,12 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(event["properties"]["result_count_bucket"], "2_5")
         self.assertNotIn("content", event["properties"])
 
+    def test_logging_event_wakes_background_uploader(self):
+        with mock.patch.object(telemetry._upload_wakeup, "set") as wake:
+            event_id = telemetry.log_event("view_opened", {"view_name": "home"})
+        self.assertIsNotNone(event_id)
+        wake.assert_called_once_with()
+
     @mock.patch("telemetry.requests.post")
     def test_upload_marks_events_as_uploaded(self, post):
         response = mock.Mock()
