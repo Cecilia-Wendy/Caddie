@@ -9496,19 +9496,19 @@ const MARKETING_NATIVE_STAGES=[
     {selector:'.exp-company-card',matchText:'澄海科技',caption:'打开刚才写入的真实经历'},
     {selector:'.experience-project-row',matchText:'用户增长漏斗分析',caption:'回到刚才写入的真实项目'},
     {selector:'.proj-tab',matchText:'面试准备',caption:'打开项目的正式面试准备页'},
-    {selector:'.project-real-questions .follow-row',caption:'面试真题已经回流到刚才的项目'},
+    {selector:'.project-real-questions .follow-top',caption:'面试真题已经回流到刚才的项目'},
     {selector:'.project-real-questions .follow-answer',action:'observe',caption:'展开查看当时的真实回答'},
     {selector:'.project-real-questions .follow-tools button',matchText:'查看完整复盘',caption:'进入这道题的完整逐题复盘'},
     {selector:'.iv-deep-coach-head',action:'observe',caption:'查看面试官意图与本题批改结论'},
     {selector:'.iv-deep-coach-head button',matchText:'教练工作台',caption:'打开教练工作台继续讨论'},
-    {selector:'.iv-coach-thread-empty button',matchText:'解释原回答的问题',caption:'把分歧带进教练台继续校准'},
+    {fill:'#ivCoachMessage',type:true,value:'请解释我原回答为什么没有形成完整闭环，并告诉我参考答法补上了哪一层判断。',caption:'把分歧带进教练台继续校准'},
     {selector:'.iv-coach-composer',action:'observe',caption:'教练已读取题目、真实回答与批改基线'},
     {selector:'.iv-coach-workspace-head button',matchText:'关闭工作台',caption:'回到完整批改文档'},
     {selector:'.iv-coach-reference button',matchText:'采用到左侧继续编辑',caption:'把参考答法采用到左侧答案'},
     {selector:'#ivQuestionAnswer',action:'observe',caption:'参考答法已进入正式答案编辑器'},
     {selector:'.iv-answer-card-head button',matchText:'保存答案',caption:'保存为新的答案版本'},
     {selector:'.iv-text-back',matchText:'返回我的经历',caption:'回到刚才的项目查看更新结果'},
-    {selector:'.project-real-questions .follow-row',caption:'重新打开项目中的这道真实面试题'},
+    {selector:'.project-real-questions .follow-top',caption:'重新打开项目中的这道真实面试题'},
     {selector:'.project-real-questions .follow-answer',action:'observe',caption:'更新后的答案已回流并保留在项目中'}]}
 ];
 let marketingNativeStage=0,marketingNativeStep=0,marketingNativeTimer=null,marketingNativePlaying=true,marketingNativeRun=0;
