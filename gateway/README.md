@@ -9,6 +9,8 @@
 - `CADDIE_WEBSITE_CALLBACK_URL`：用户激活后回写官网状态的完整 HTTPS 地址。
 - `CADDIE_GATEWAY_CALLBACK_TOKEN`：Gateway 与官网共同持有的回调凭证。
 - `CADDIE_GATEWAY_TESTERS_JSON`：旧内测用户兼容凭证；新用户不再写入这里。
+- `SUPABASE_URL`：产品分析项目地址，例如 `https://xxx.supabase.co`。
+- `SUPABASE_SERVICE_ROLE_KEY`：只保存在 Gateway 服务器的凭证，不可进入客户端或 Git。
 
 示例（不要提交真实 token）：
 
@@ -25,7 +27,16 @@ macOS Keychain，用户看不到 DeepSeek Key 或 Gateway Token。
 - Base URL：`https://你的-gateway-域名/v1`
 - Model：`deepseek-v4-flash`
 
-Gateway 只保存 tester ID、日期、调用次数、token 数和缓存命中统计，不保存请求正文或回复正文。
+Gateway 保存邮箱、称呼、内测批次、设备关系和额度统计，不保存求职资料、AI 请求正文或回复正文。粗粒度行为事件只携带账户、设备和批次 ID，不携带邮箱和称呼。
+
+## 内测数据台
+
+1. 在 Supabase SQL Editor 执行 `supabase/telemetry_schema.sql`。
+2. 将 `SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY` 写入 `/opt/caddie-gateway-secrets.env`。
+3. 重新执行 `sudo bash gateway/deploy-tencent.sh`。
+4. 打开 `https://43-128-7-135.sslip.io/gateway/admin`，输入 `/opt/caddie-gateway/admin-credential.txt` 中的管理 Token。
+
+数据台展示用户活跃、功能使用、AI 与外部 Agent 粗粒度事件，不展示简历、JD、提示词、AI 对话或文件路径。
 
 ## 官网联动
 

@@ -73,6 +73,12 @@ fi
 if [ -n "${CADDIE_GATEWAY_CALLBACK_TOKEN:-}" ]; then
   printf 'CADDIE_GATEWAY_CALLBACK_TOKEN=%s\n' "$CADDIE_GATEWAY_CALLBACK_TOKEN" >> "$ENV_FILE"
 fi
+if [ -n "${SUPABASE_URL:-}" ]; then
+  printf 'SUPABASE_URL=%s\n' "$SUPABASE_URL" >> "$ENV_FILE"
+fi
+if [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+  printf 'SUPABASE_SERVICE_ROLE_KEY=%s\n' "$SUPABASE_SERVICE_ROLE_KEY" >> "$ENV_FILE"
+fi
 printf 'CADDIE_GATEWAY_TESTERS_JSON={"tester-01":{"token":"%s","daily_calls":50,"daily_tokens":300000},"tester-02":{"token":"%s","daily_calls":50,"daily_tokens":300000}}\n' \
   "$TESTER_01_TOKEN" "$TESTER_02_TOKEN" >> "$ENV_FILE"
 printf 'DEEPSEEK_MODEL=deepseek-v4-flash\nCADDIE_GATEWAY_DATA_DIR=/data\n' >> "$ENV_FILE"
@@ -132,6 +138,7 @@ echo
 echo "CADDIE_GATEWAY_DEPLOYED"
 echo "Base URL: https://${PUBLIC_HOST}/gateway/v1"
 echo "Model: deepseek-v4-flash"
+echo "Admin dashboard: https://${PUBLIC_HOST}/gateway/admin"
 echo "Tester credentials saved at: ${TOKEN_FILE}"
 echo "Admin credential saved at: ${ADMIN_FILE}"
 echo "Credentials and the DeepSeek API key were not printed."

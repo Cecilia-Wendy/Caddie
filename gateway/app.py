@@ -14,12 +14,13 @@ import threading
 import time
 import uuid
 import secrets
+import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 
 app = FastAPI(title="Caddie AI Gateway", version="1.0.0")
@@ -41,7 +42,10 @@ PRICE_OUTPUT_CNY = float(os.environ.get("DEEPSEEK_OUTPUT_CNY_PER_M", "2"))
 ADMIN_TOKEN = os.environ.get("CADDIE_GATEWAY_ADMIN_TOKEN", "").strip()
 WEBSITE_CALLBACK_URL = os.environ.get("CADDIE_WEBSITE_CALLBACK_URL", "").strip()
 GATEWAY_CALLBACK_TOKEN = os.environ.get("CADDIE_GATEWAY_CALLBACK_TOKEN", "").strip()
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 _db_lock = threading.Lock()
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _now() -> datetime:
@@ -139,6 +143,21 @@ def _connect() -> sqlite3.Connection:
                note TEXT DEFAULT ''
            )"""
     )
+    for column, definition in (
+        ("email", "TEXT DEFAULT ''"),
+        ("email_normalized", "TEXT DEFAULT ''"),
+        ("display_name", "TEXT DEFAULT ''"),
+        ("cohort_id", "TEXT DEFAULT ''"),
+        ("profile_completed", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        try:
+            conn.execute(f"ALTER TABLE accounts ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError:
+            pass
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email_normalized "
+        "ON accounts(email_normalized) WHERE email_normalized<>''"
+    )
     conn.execute(
         """CREATE TABLE IF NOT EXISTS devices (
                id TEXT PRIMARY KEY,
@@ -164,16 +183,22 @@ def _authenticate(authorization: str | None) -> dict:
     legacy = _tokens().get(token_hash)
     if legacy:
         legacy["account_id"] = legacy["tester_id"]
+        legacy["device_id"] = "legacy_" + _digest(token)[:20]
         legacy["total_tokens"] = 0
         legacy["expires_at"] = None
         legacy["status"] = "active"
+        legacy["email"] = ""
+        legacy["display_name"] = legacy["tester_id"]
+        legacy["cohort_id"] = "legacy"
+        legacy["profile_completed"] = False
         return legacy
     conn = _connect()
     row = conn.execute(
         """SELECT d.id AS device_id,d.account_id,d.status AS device_status,
                   a.status,a.expires_at,a.total_tokens_limit AS total_tokens,
                   a.daily_tokens_limit AS daily_tokens,
-                  a.daily_calls_limit AS daily_calls
+                  a.daily_calls_limit AS daily_calls,a.email,a.display_name,
+                  a.cohort_id,a.profile_completed
            FROM devices d JOIN accounts a ON a.id=d.account_id
            WHERE d.token_hash=?""",
         (token_hash,),
@@ -199,7 +224,23 @@ def _authenticate(authorization: str | None) -> dict:
         "total_tokens": int(row["total_tokens"]),
         "expires_at": row["expires_at"],
         "status": row["status"],
+        "email": row["email"] or "",
+        "display_name": row["display_name"] or "",
+        "cohort_id": row["cohort_id"] or "",
+        "profile_completed": bool(row["profile_completed"]),
     }
+
+
+def _validated_profile(body: dict, *, required: bool = True) -> tuple[str, str]:
+    email = str(body.get("email") or "").strip().lower()
+    display_name = str(body.get("display_name") or "").strip()
+    if required and (not email or not display_name):
+        raise HTTPException(400, "请填写邮箱和称呼")
+    if email and (len(email) > 160 or not EMAIL_RE.match(email)):
+        raise HTTPException(400, "请输入有效邮箱")
+    if display_name and not 1 <= len(display_name) <= 40:
+        raise HTTPException(400, "称呼需为 1-40 个字符")
+    return email, display_name
 
 
 def _require_admin(authorization: str | None) -> None:
@@ -343,6 +384,7 @@ async def activate(request: Request):
     code = str(body.get("invite_code") or "").strip().upper()
     device_key = str(body.get("device_id") or "").strip()[:160]
     device_name = str(body.get("device_name") or "Mac")[:120]
+    email, display_name = _validated_profile(body)
     if len(code) < 8 or not device_key:
         raise HTTPException(400, "请输入有效邀请码")
     with _db_lock:
@@ -365,11 +407,16 @@ async def activate(request: Request):
         activated_at = _now()
         account_expires = activated_at + timedelta(days=int(invite["trial_days"]))
         conn.execute(
-            "INSERT INTO accounts VALUES(?,?,?,?,?,?,?,?)",
+            """INSERT INTO accounts(
+                   id,status,created_at,expires_at,total_tokens_limit,
+                   daily_tokens_limit,daily_calls_limit,note,email,
+                   email_normalized,display_name,cohort_id,profile_completed
+               ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 account_id, "active", _iso(activated_at), _iso(account_expires),
                 invite["total_tokens_limit"], invite["daily_tokens_limit"],
                 invite["daily_calls_limit"], invite["batch_name"] or "",
+                email, email, display_name, invite["batch_name"] or "", 1,
             ),
         )
         conn.execute(
@@ -393,7 +440,40 @@ async def activate(request: Request):
         "total_tokens_limit": int(invite["total_tokens_limit"]),
         "daily_tokens_limit": int(invite["daily_tokens_limit"]),
         "daily_calls_limit": int(invite["daily_calls_limit"]),
+        "email": email,
+        "display_name": display_name,
+        "cohort_id": invite["batch_name"] or "",
+        "profile_completed": True,
     }
+
+
+@app.get("/v1/profile")
+def profile(authorization: str | None = Header(None)):
+    tester = _authenticate(authorization)
+    return {key: tester[key] for key in (
+        "account_id", "device_id", "email", "display_name", "cohort_id",
+        "profile_completed",
+    )}
+
+
+@app.put("/v1/profile")
+async def update_profile(request: Request, authorization: str | None = Header(None)):
+    tester = _authenticate(authorization)
+    email, display_name = _validated_profile(await request.json())
+    conn = _connect()
+    try:
+        conn.execute(
+            """UPDATE accounts SET email=?,email_normalized=?,display_name=?,
+                      profile_completed=1 WHERE id=?""",
+            (email, email, display_name, tester["account_id"]),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(409, "该邮箱已绑定其他内测资格") from exc
+    finally:
+        conn.close()
+    return {"ok": True, "account_id": tester["account_id"], "email": email,
+            "display_name": display_name, "profile_completed": True}
 
 
 @app.post("/admin/v1/invites/batch")
@@ -536,7 +616,132 @@ def usage(authorization: str | None = Header(None)):
         "total_tokens_limit": tester.get("total_tokens") or None,
         "expires_at": tester.get("expires_at"),
         "account_status": tester.get("status", "active"),
+        "email": tester.get("email", ""),
+        "display_name": tester.get("display_name", ""),
+        "cohort_id": tester.get("cohort_id", ""),
+        "profile_completed": bool(tester.get("profile_completed")),
     }
+
+
+def _supabase_headers() -> dict:
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(503, "遥测云端尚未配置")
+    return {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _analytics_events(days: int) -> list[dict]:
+    days = max(1, min(int(days), 90))
+    since = _iso(_now() - timedelta(days=days))
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/telemetry_events",
+            headers=_supabase_headers(),
+            params={
+                "select": "event_name,account_id,properties,client_time,app_version",
+                "client_time": f"gte.{since}",
+                "order": "client_time.desc",
+                "limit": "10000",
+            },
+            timeout=(8, 30),
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        raise HTTPException(502, "暂时无法读取产品分析数据") from exc
+
+
+@app.get("/admin/v1/analytics/overview")
+def analytics_overview(days: int = 14, authorization: str | None = Header(None)):
+    _require_admin(authorization)
+    events = _analytics_events(days)
+    conn = _connect()
+    accounts = [dict(row) for row in conn.execute(
+        "SELECT accounts.id,email,display_name,cohort_id,status,created_at,last_seen_at "
+        "FROM accounts LEFT JOIN (SELECT account_id,MAX(last_seen_at) last_seen_at "
+        "FROM devices GROUP BY account_id) d ON d.account_id=accounts.id "
+        "ORDER BY created_at DESC"
+    ).fetchall()]
+    conn.close()
+    by_user: dict[str, dict] = {
+        account["id"]: {**account, "events": 0, "last_event_at": None, "features": {}}
+        for account in accounts
+    }
+    event_counts: dict[str, int] = {}
+    active_days: dict[str, set[str]] = {}
+    for event in events:
+        name = str(event.get("event_name") or "unknown")
+        event_counts[name] = event_counts.get(name, 0) + 1
+        account_id = str(event.get("account_id") or "")
+        if account_id in by_user:
+            item = by_user[account_id]
+            item["events"] += 1
+            item["last_event_at"] = item["last_event_at"] or event.get("client_time")
+            props = event.get("properties") or {}
+            feature = str(props.get("feature") or name)
+            item["features"][feature] = item["features"].get(feature, 0) + 1
+            active_days.setdefault(account_id, set()).add(str(event.get("client_time") or "")[:10])
+    for account_id, item in by_user.items():
+        item["active_days"] = len(active_days.get(account_id, set()))
+    return {
+        "days": max(1, min(int(days), 90)),
+        "total_users": len(accounts),
+        "active_users": sum(1 for item in by_user.values() if item["events"]),
+        "total_events": len(events),
+        "event_counts": event_counts,
+        "users": list(by_user.values()),
+    }
+
+
+ADMIN_DASHBOARD = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Caddie 内测数据</title>
+<style>body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#f5f7fa}main{max-width:1180px;margin:0 auto;padding:40px 24px}header{display:flex;justify-content:space-between;align-items:end;margin-bottom:24px}h1{margin:0;font-size:28px}p{color:#718096}.login,.panel{background:white;border:1px solid #dfe5ec;border-radius:8px;padding:20px}.login{display:flex;gap:10px}input,button,select{font:inherit;padding:10px 12px;border:1px solid #ccd5e0;border-radius:6px}input{flex:1}button{background:#2563eb;color:white;border-color:#2563eb;cursor:pointer}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.stat{background:white;border:1px solid #dfe5ec;padding:18px;border-radius:8px}.stat b{display:block;font-size:26px;margin-top:8px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #e7ebf0}th{color:#718096;font-size:12px}.muted{color:#8a96a6}.tag{display:inline-block;background:#eef4ff;color:#245ac7;padding:3px 7px;border-radius:5px;margin:2px}#content{display:none}@media(max-width:720px){.stats{grid-template-columns:1fr}.login{display:block}.login>*{box-sizing:border-box;width:100%;margin:4px 0}}</style></head>
+<body><main><header><div><h1>Caddie 内测数据</h1><p>按用户查看活跃、功能使用与反馈线索，不展示求职资料或 AI 正文。</p></div><select id="days"><option value="7">7 天</option><option value="14" selected>14 天</option><option value="30">30 天</option></select></header><section class="login" id="login"><input id="token" type="password" placeholder="Gateway 管理 Token"><button onclick="load()">打开数据台</button></section><div id="content"><section class="stats"><div class="stat">内测用户<b id="users">0</b></div><div class="stat">活跃用户<b id="active">0</b></div><div class="stat">行为事件<b id="events">0</b></div></section><section class="panel"><table><thead><tr><th>用户</th><th>批次</th><th>活跃天数</th><th>事件</th><th>主要使用</th><th>最后活跃</th></tr></thead><tbody id="rows"></tbody></table></section></div></main>
+<script>const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));async function load(){const token=document.querySelector('#token').value||sessionStorage.caddieAdminToken;if(!token)return;sessionStorage.caddieAdminToken=token;const days=document.querySelector('#days').value;const r=await fetch('/admin/v1/analytics/overview?days='+days,{headers:{Authorization:'Bearer '+token}});if(!r.ok){alert((await r.json()).detail||'读取失败');return}const d=await r.json();login.style.display='none';content.style.display='block';users.textContent=d.total_users;active.textContent=d.active_users;events.textContent=d.total_events;rows.innerHTML=d.users.map(u=>'<tr><td><b>'+esc(u.display_name||'待补充')+'</b><br><span class="muted">'+esc(u.email||u.id)+'</span></td><td>'+esc(u.cohort_id||'—')+'</td><td>'+u.active_days+'</td><td>'+u.events+'</td><td>'+Object.entries(u.features).sort((a,b)=>b[1]-a[1]).slice(0,4).map(x=>'<span class="tag">'+esc(x[0])+' '+x[1]+'</span>').join('')+'</td><td>'+esc((u.last_event_at||u.last_seen_at||'—').slice(0,19))+'</td></tr>').join('')}days.onchange=load;if(sessionStorage.caddieAdminToken)load();</script></body></html>"""
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_dashboard():
+    return HTMLResponse(ADMIN_DASHBOARD, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/v1/telemetry/events")
+async def ingest_telemetry(request: Request, authorization: str | None = Header(None)):
+    tester = _authenticate(authorization)
+    body = await request.json()
+    events = body if isinstance(body, list) else body.get("events")
+    if not isinstance(events, list) or not events or len(events) > 100:
+        raise HTTPException(400, "events 必须是 1-100 条事件")
+    allowed = {
+        "event_id", "event_name", "schema_version", "installation_id", "session_id",
+        "entity_type", "entity_id_hash", "properties", "client_time", "app_version", "platform",
+    }
+    cleaned = []
+    for event in events:
+        if not isinstance(event, dict):
+            raise HTTPException(400, "事件格式无效")
+        item = {key: event.get(key) for key in allowed if key in event}
+        item.update({
+            "account_id": tester["account_id"],
+            "device_id": tester["device_id"],
+            "cohort_id": tester.get("cohort_id") or "",
+        })
+        cleaned.append(item)
+    try:
+        response = requests.post(
+            f"{SUPABASE_URL}/rest/v1/telemetry_events",
+            headers={**_supabase_headers(), "Prefer": "return=minimal"},
+            json=cleaned,
+            timeout=(8, 30),
+        )
+        if response.status_code not in {200, 201, 204, 409}:
+            response.raise_for_status()
+    except requests.RequestException as exc:
+        raise HTTPException(502, "遥测写入失败") from exc
+    return {"ok": True, "accepted": len(cleaned)}
 
 
 @app.post("/v1/chat/completions")

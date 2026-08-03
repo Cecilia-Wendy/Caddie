@@ -47,6 +47,12 @@ create table if not exists public.telemetry_events (
     platform text not null default 'macos' check (platform = 'macos')
 );
 
+-- Identifiers are attached by the authenticated Caddie Gateway. Personal
+-- fields such as email and display name stay in the Gateway account database.
+alter table public.telemetry_events add column if not exists account_id text;
+alter table public.telemetry_events add column if not exists device_id text;
+alter table public.telemetry_events add column if not exists cohort_id text;
+
 -- Existing alpha projects may still have the first-release CHECK constraints.
 -- Recreate them so newer coarse events can be inserted without recreating the
 -- table or weakening the insert-only RLS policy.
@@ -82,6 +88,9 @@ create index if not exists idx_telemetry_events_name_time
 create index if not exists idx_telemetry_events_installation_time
     on public.telemetry_events(installation_id, server_time);
 
+create index if not exists idx_telemetry_events_account_time
+    on public.telemetry_events(account_id, server_time);
+
 alter table public.telemetry_events enable row level security;
 
 revoke all on table public.telemetry_events from anon, authenticated;
@@ -102,4 +111,4 @@ create policy "anonymous telemetry insert only"
     );
 
 comment on table public.telemetry_events is
-    'Anonymous coarse Caddie product events. No career text, prompts, paths, names, emails, phone numbers, or API keys.';
+    'Account-linked coarse Caddie product events. No career text, prompts, paths, names, emails, phone numbers, or API keys.';
