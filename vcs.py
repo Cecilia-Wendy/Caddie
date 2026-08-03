@@ -8,13 +8,14 @@ Caddie - 版本管理（本地 Git）
 之后要推到 GitHub，再加 remote + push 即可。
 """
 import re
+import os
 import threading
 import subprocess
 from pathlib import Path
 
 import db
 
-CADDIE_DIR = Path.home() / ".caddie"
+CADDIE_DIR = Path(os.environ.get("CADDIE_DATA_DIR") or (Path.home() / ".caddie"))
 VAULT = CADDIE_DIR / "vault"
 
 

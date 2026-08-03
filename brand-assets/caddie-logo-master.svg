@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="mainBlue" x1="220" y1="150" x2="735" y2="850" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5A8BFF"/>
+      <stop offset=".48" stop-color="#3370FF"/>
+      <stop offset="1" stop-color="#255BE0"/>
+    </linearGradient>
+    <linearGradient id="accentBlue" x1="690" y1="335" x2="772" y2="685" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#AFC9FF"/>
+      <stop offset="1" stop-color="#76A2FF"/>
+    </linearGradient>
+    <filter id="softDepth" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1646B8" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <g filter="url(#softDepth)">
+    <!-- A single continuous C, built as a precise open ring. -->
+    <path fill="url(#mainBlue)" fill-rule="evenodd" d="
+      M 744 252
+      A 366 366 0 1 0 744 772
+      L 651 679
+      A 234 234 0 1 1 651 345
+      Z"/>
+    <!-- Small integrated facet: deliberately subordinate to the main C. -->
+    <path fill="url(#accentBlue)" d="
+      M 651 345
+      L 744 252
+      L 744 405
+      L 695 438
+      L 651 411
+      Z"/>
+    <path fill="#2459DB" opacity=".22" d="
+      M 651 679
+      L 744 772
+      L 744 620
+      L 695 587
+      L 651 613
+      Z"/>
+  </g>
+  <!-- Subtle AI presence, kept inside the negative space. -->
+  <rect x="456" y="475" width="30" height="70" rx="15" fill="#3370FF"/>
+  <rect x="538" y="475" width="30" height="70" rx="15" fill="#3370FF"/>
+</svg>

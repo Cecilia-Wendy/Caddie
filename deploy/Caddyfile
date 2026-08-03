@@ -1,0 +1,23 @@
+43-128-7-135.sslip.io {
+	encode zstd gzip
+
+	request_body {
+		max_size 10MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Content-Security-Policy "frame-ancestors 'self' https://caddiecareer.com https://www.caddiecareer.com http://localhost:* http://127.0.0.1:*"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-X-Frame-Options
+	}
+
+	handle_path /gateway/* {
+		reverse_proxy caddie-gateway:8080
+	}
+
+	handle {
+		reverse_proxy caddie:8766
+	}
+}
