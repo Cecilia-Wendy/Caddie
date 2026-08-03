@@ -9588,7 +9588,7 @@ async function playMarketingStage(index,userInitiated=false){
   marketingNativeStage=(index+MARKETING_NATIVE_STAGES.length)%MARKETING_NATIVE_STAGES.length;marketingNativeStep=0;renderMarketingNativeController();
   if(marketingNativeStage===0){if(!await prepareMarketingAgentStory(run))return;}
   else if(marketingNativeStage===1){if(!await prepareMarketingTrackStory(run))return;}
-  else if(marketingNativeStage===3){STATE.followupFilter='all';STATE.followupGrouped=false;}
+  else if(marketingNativeStage===3){Object.assign(STATE,{projectOpen:null,expView:'overview',expCompanyId:null,expTab:'facts',projTab:'doc',followupFilter:'all',followupGrouped:false});}
   else if(MARKETING_NATIVE_STAGES[marketingNativeStage].reset){if(!await resetMarketingStoryData(run))return;}
   for(const step of MARKETING_NATIVE_STAGES[marketingNativeStage].steps){if(!marketingNativePlaying&& !userInitiated)break;marketingNativeStep+=1;if(!await performMarketingStep(step,run))return}
   if(run!==marketingNativeRun)return;marketingNativeStep=0;renderMarketingNativeController();
