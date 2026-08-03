@@ -15,6 +15,22 @@ HOST = os.environ.get("CADDIE_HOST", "127.0.0.1")
 URL = f"http://{HOST}:{PORT}"
 
 
+def console_write(message: str, *, error: bool = False):
+    """Write diagnostics without crashing a consoleless or GBK Windows build."""
+    stream = sys.stderr if error else sys.stdout
+    if stream is None:
+        return
+    text = str(message)
+    try:
+        stream.write(text + "\n")
+        stream.flush()
+    except UnicodeEncodeError:
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        safe = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+        stream.write(safe + "\n")
+        stream.flush()
+
+
 def start_server():
     try:
         import uvicorn
@@ -29,7 +45,7 @@ def start_server():
         )
     except Exception:
         details = traceback.format_exc()
-        print(details, file=sys.stderr)
+        console_write(details, error=True)
         diagnostic_path = os.environ.get("CADDIE_STARTUP_LOG")
         if diagnostic_path:
             try:
@@ -68,18 +84,18 @@ def main():
             from agent_launchers import ensure_packaged_launchers
             ensure_packaged_launchers()
         except OSError as exc:
-            print(f"⚠️ Agent 启动器初始化失败：{exc}")
+            console_write(f"Agent 启动器初始化失败：{exc}", error=True)
 
-    print("🏌️  启动 Caddie 求职管家...")
+    console_write("启动 Caddie 求职管家...")
     # The optional launch agent may already own the local server. Reusing it
     # avoids a noisy bind failure and makes reopening the desktop shell cheap.
     if not wait_for_server(timeout=0.8):
         threading.Thread(target=start_server, daemon=True).start()
 
     if not wait_for_server():
-        print(f"❌ 服务器启动失败，请检查端口 {PORT} 是否被占用")
+        console_write(f"服务器启动失败，请检查端口 {PORT} 是否被占用", error=True)
         sys.exit(1)
-    print(f"✅ 服务已就绪：{URL}")
+    console_write(f"服务已就绪：{URL}")
 
     if os.environ.get("CADDIE_HEADLESS") == "1":
         try:
@@ -90,7 +106,7 @@ def main():
 
     try:
         import webview
-        print("🖥️  打开桌面窗口...")
+        console_write("打开桌面窗口...")
         webview.create_window(
             title="Caddie",
             url=URL, width=1280, height=860,
@@ -123,13 +139,13 @@ def main():
         # ignored, leaving a visible Caddie window behind the current app.
         webview.start(after_gui_started, debug=False)
     except ImportError:
-        print("💡 未安装 pywebview，回退到浏览器（pip install pywebview 可获桌面窗口）")
+        console_write("未安装 pywebview，回退到浏览器（pip install pywebview 可获桌面窗口）")
         webbrowser.open(URL)
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("\n👋 Caddie 已关闭")
+            console_write("Caddie 已关闭")
 
 
 if __name__ == "__main__":
