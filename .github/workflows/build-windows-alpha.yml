@@ -47,11 +47,31 @@ jobs:
         shell: pwsh
         run: .\scripts\build-windows-alpha.ps1
 
-      - name: Smoke test packaged executable
+      - name: Smoke test packaged desktop server
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath ".\dist\Caddie\Caddie.exe" -ArgumentList "--agent-cli", "guide" -Wait -PassThru -NoNewWindow
-          if ($process.ExitCode -ne 0) { throw "Packaged CLI smoke test failed: $($process.ExitCode)" }
+          $env:CADDIE_HEADLESS = "1"
+          $env:CADDIE_DATA_DIR = Join-Path $env:RUNNER_TEMP "caddie-smoke"
+          $process = Start-Process -FilePath ".\dist\Caddie\Caddie.exe" -PassThru
+          $healthy = $false
+          try {
+            for ($attempt = 0; $attempt -lt 90; $attempt++) {
+              if ($process.HasExited) {
+                throw "Packaged desktop exited before the server became ready: $($process.ExitCode)"
+              }
+              try {
+                $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8766/" -TimeoutSec 2
+                if ($response.StatusCode -eq 200) {
+                  $healthy = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $healthy) { throw "Packaged desktop server was not ready within 90 seconds" }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
