@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Caddie 内测数据</title>
+  <style>
+    :root { --ink:#172033; --sub:#6b7788; --line:#dfe5ec; --blue:#2463eb; --green:#178565; --red:#c34c3b; --amber:#a66b13; --bg:#f4f6f8; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+    main { max-width:1360px; margin:0 auto; padding:32px 24px 60px; }
+    h1,h2 { margin:0; } h1 { font-size:28px; } h2 { font-size:17px; }
+    p { color:var(--sub); margin:7px 0 0; }
+    .top,.panel-head,.rank-row header { display:flex; justify-content:space-between; align-items:center; }
+    .toolbar,.login { display:flex; gap:10px; }
+    input,button,select { font:inherit; padding:10px 12px; border:1px solid #cbd4df; border-radius:6px; background:white; }
+    button { color:white; background:var(--blue); border-color:var(--blue); cursor:pointer; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .login,.panel,.metric { background:white; border:1px solid var(--line); border-radius:8px; }
+    .login { padding:18px; margin-top:20px; } .login input { flex:1; }
+    #content { display:none; }
+    .quality { display:flex; gap:14px; border-left:3px solid var(--amber); background:#fff9ed; padding:14px 16px; margin:16px 0; }
+    .quality b { white-space:nowrap; color:#75480c; } .quality p { margin:0; color:#755d38; }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:16px 0; }
+    .metric { padding:16px; } .metric span,.metric small { display:block; color:var(--sub); } .metric span { font-size:12px; }
+    .metric b { display:block; font-size:25px; margin:7px 0 3px; } .metric.warn b { color:var(--amber); }
+    .grid { display:grid; grid-template-columns:1.5fr 1fr; gap:14px; margin-top:14px; }
+    .panel { padding:18px; min-width:0; } .full { grid-column:1/-1; }
+    .panel-head { margin-bottom:16px; } .panel-head span { color:var(--sub); font-size:12px; }
+    .funnel { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+    .funnel-step { position:relative; padding:14px 12px; background:#f7f9fc; border:1px solid var(--line); border-radius:6px; }
+    .funnel-step:after { content:'›'; position:absolute; right:-8px; top:28px; color:#9aa6b4; font-size:22px; z-index:2; }
+    .funnel-step:last-child:after { display:none; } .funnel-step b { display:block; font-size:20px; margin:7px 0; }
+    .funnel-step span,.funnel-step small { display:block; color:var(--sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .chart { height:190px; display:flex; align-items:flex-end; gap:5px; border-bottom:1px solid var(--line); padding-top:10px; }
+    .bar-col { flex:1; min-width:4px; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:5px; }
+    .bar { width:100%; max-width:28px; min-height:2px; background:var(--blue); border-radius:3px 3px 0 0; }
+    .bar-col label { font-size:10px; color:#8a96a5; height:14px; }
+    .legend { display:flex; gap:16px; margin-top:12px; color:var(--sub); font-size:12px; }
+    .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:5px; background:var(--blue); }
+    .dot.green { background:var(--green); } .dot.red { background:var(--red); }
+    .rank { display:grid; gap:13px; } .rank-row small { color:var(--sub); }
+    .progress { height:6px; background:#edf1f5; border-radius:4px; overflow:hidden; margin:7px 0 4px; }
+    .progress i { display:block; height:100%; background:var(--blue); }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    .subhead { font-size:12px; color:var(--sub); margin-bottom:10px; }
+    table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:11px 9px; border-bottom:1px solid #e8edf2; vertical-align:top; }
+    th { color:var(--sub); font-size:11px; } td b { font-size:13px; }
+    .muted { color:#8792a1; font-size:12px; } .tag { display:inline-block; background:#eef4ff; color:#245ac7; padding:3px 7px; border-radius:5px; margin:2px; }
+    .empty { color:var(--sub); padding:24px 0; text-align:center; } .section-title { margin-top:24px; }
+    .status-good { color:var(--green); } .status-bad { color:var(--red); }
+    @media(max-width:980px){ .metrics{grid-template-columns:repeat(2,1fr)} .grid,.split{grid-template-columns:1fr} .funnel{grid-template-columns:repeat(2,1fr)} .funnel-step:after{display:none} }
+    @media(max-width:620px){ main{padding:20px 14px}.metrics{grid-template-columns:1fr 1fr}.login{display:block}.login>*{width:100%;margin:4px 0}.top{display:block}.toolbar{margin-top:12px} }
+  </style>
+</head>
+<body><main>
+  <header class="top"><div><h1>Caddie 内测数据</h1><p>从激活、求职闭环、AI 质量、Agent 效率和稳定性五个角度定位产品问题。</p></div><div class="toolbar"><select id="days"><option value="7">7 天</option><option value="14" selected>14 天</option><option value="30">30 天</option><option value="90">90 天</option></select><button id="refresh">刷新</button></div></header>
+  <section class="login" id="login"><input id="token" type="password" placeholder="Gateway 管理 Token"><button id="open">打开数据台</button></section>
+  <div id="content"><div id="quality"></div>
+    <section class="metrics">
+      <div class="metric"><span>内测账户</span><b id="users">0</b><small>已发放资格</small></div>
+      <div class="metric"><span>活跃设备</span><b id="devices">0</b><small id="identified">Gateway 已识别</small></div>
+      <div class="metric"><span>行为事件</span><b id="events">0</b><small id="cap">当前窗口</small></div>
+      <div class="metric"><span>有效行为</span><b id="meaningful">0%</b><small>排除启动和浏览</small></div>
+      <div class="metric"><span>可识别会话</span><b id="sessions">0</b><small>用户使用深度</small></div>
+      <div class="metric"><span>AI 调用</span><b id="aiCalls">0</b><small>模型能力使用</small></div>
+      <div class="metric"><span>外部 Agent</span><b id="agentCalls">0</b><small>MCP / 工具调用</small></div>
+      <div class="metric warn"><span>失败事件</span><b id="failures">0</b><small id="failureRate">失败率 0%</small></div>
+    </section>
+    <section class="grid">
+      <div class="panel full"><div class="panel-head"><h2>求职闭环路径</h2><span>事件量 / 已归因账户</span></div><div class="funnel" id="funnel"></div></div>
+      <div class="panel"><div class="panel-head"><h2>活跃与使用趋势</h2><span>按日事件</span></div><div class="chart" id="dailyChart"></div><div class="legend"><span><i class="dot"></i>事件</span><span><i class="dot green"></i>Gateway 设备</span><span><i class="dot red"></i>失败</span></div></div>
+      <div class="panel"><div class="panel-head"><h2>产品功能使用</h2><span>前 8 项</span></div><div class="rank" id="features"></div></div>
+      <div class="panel"><div class="panel-head"><h2>功能动作与成功率</h2><span>前 10 项</span></div><div class="rank" id="actions"></div></div>
+      <div class="panel"><div class="panel-head"><h2>失败诊断</h2><span>原因 / HTTP 状态</span></div><div class="split"><div><div class="subhead">失败原因</div><div class="rank" id="failureReasons"></div></div><div><div class="subhead">HTTP 状态</div><div class="rank" id="httpFailures"></div></div></div></div>
+      <div class="panel"><div class="panel-head"><h2>AI 调用质量</h2><span>档位 / 失败 / 回退</span></div><div class="rank" id="aiPanel"></div></div>
+      <div class="panel"><div class="panel-head"><h2>外部 Agent 使用</h2><span>类型 / 工具 / 失败</span></div><div class="rank" id="agentPanel"></div></div>
+      <div class="panel"><div class="panel-head"><h2>版本分布</h2><span>发现旧版本与回归</span></div><div class="rank" id="versions"></div></div>
+      <div class="panel"><div class="panel-head"><h2>耗时分布</h2><span>接口与 AI 合并视图</span></div><div class="rank" id="durations"></div></div>
+    </section>
+    <h2 class="section-title">内测用户</h2>
+    <section class="panel" style="margin-top:10px;overflow:auto"><table><thead><tr><th>用户</th><th>批次</th><th>状态</th><th>活跃天数</th><th>可归因事件</th><th>主要使用</th><th>最后连接</th></tr></thead><tbody id="rows"></tbody></table></section>
+  </div>
+</main><script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const apiBase=location.pathname.startsWith('/gateway/')?'/gateway':'';
+const labels={app_started:'启动 Caddie',view_opened:'打开页面',feature_action_completed:'完成功能动作',ai_call_completed:'AI 调用',external_agent_tool_completed:'外部 Agent',source_added:'添加资料',source_ingested:'资料入库',job_track_created:'建立岗位',asset_generated:'生成资产',feedback_submitted:'提交反馈',sources:'资料库',job_tracks:'求职工作台',interview:'面试准备',applications:'投递管理',invalid_output:'输出解析失败',timeout:'超时',provider_error:'供应商错误',network:'网络',auth:'鉴权',rate_limit:'限流',quota:'额度'};
+const label=x=>labels[x]||x||'其他';
+function ranking(items,{value='events',name='name',detail}={}){const max=Math.max(1,...items.map(x=>x[value]||0));return items.length?items.map(x=>`<div class="rank-row"><header><b>${esc(label(x[name]))}</b><span>${x[value]||0}</span></header><div class="progress"><i style="width:${Math.round((x[value]||0)/max*100)}%"></i></div><small>${esc(detail?detail(x):'')}</small></div>`).join(''):'<div class="empty">暂无数据</div>'}
+async function load(){const token=$('token').value||sessionStorage.caddieAdminToken;if(!token)return;sessionStorage.caddieAdminToken=token;$('refresh').disabled=true;const r=await fetch(apiBase+'/admin/v1/analytics/overview?days='+$('days').value,{headers:{Authorization:'Bearer '+token}});$('refresh').disabled=false;if(!r.ok){let message='读取失败';try{message=(await r.json()).detail||message}catch{}alert(message);return}render(await r.json())}
+function render(d){$('login').style.display='none';$('content').style.display='block';$('users').textContent=d.total_users;$('devices').textContent=d.active_devices;$('identified').textContent=`已登记 ${d.registered_devices} · 本期活跃 ${d.active_devices}`;$('events').textContent=d.total_events;$('cap').textContent=d.result_capped?'已达 10000 条查询上限':'当前时间窗口';$('meaningful').textContent=`${Math.round((d.meaningful_rate||0)*1000)/10}%`;$('sessions').textContent=d.sessions;$('aiCalls').textContent=d.ai_calls;$('agentCalls').textContent=d.agent_calls;$('failures').textContent=d.failures;$('failureRate').textContent=`失败率 ${d.total_events?Math.round(d.failures/d.total_events*1000)/10:0}%`;
+  $('quality').innerHTML=d.unattributed_events?`<div class="quality"><b>数据口径提示</b><p>${d.unattributed_events} 条历史事件无法归到具体账户。${d.legacy_installation_ids} 个本地安装标识可能来自同一台 Mac 的不同版本或数据目录，不计为真实设备。漏斗中的“账户”仅使用新版可归因数据。</p></div>`:'';
+  $('funnel').innerHTML=d.funnel.map(x=>`<div class="funnel-step"><span>${esc(x.label)}</span><b>${x.events}</b><small>${x.accounts} 个已归因账户</small></div>`).join('');
+  const max=Math.max(1,...d.daily.map(x=>x.events));$('dailyChart').innerHTML=d.daily.length?d.daily.map((x,i)=>`<div class="bar-col" title="${x.date} · ${x.events} 事件 · ${x.installations} 设备 · ${x.failures} 失败"><div class="bar" style="height:${Math.max(3,Math.round(x.events/max*150))}px;${x.failures?'background:#c34c3b':''}"></div><label>${i%Math.max(1,Math.ceil(d.daily.length/7))===0?x.date.slice(5):''}</label></div>`).join(''):'<div class="empty">暂无趋势数据</div>';
+  $('features').innerHTML=ranking(d.features.slice(0,8),{detail:x=>`成功 ${x.success} · 失败 ${x.failed} · ${x.installations} 台已识别设备`});
+  $('actions').innerHTML=ranking(d.actions.slice(0,10),{name:'display',detail:x=>`成功率 ${x.events?Math.round(x.success/x.events*100):0}% · 失败 ${x.failed}`});
+  $('failureReasons').innerHTML=ranking(d.failure_reasons,{detail:x=>`失败事件`});$('httpFailures').innerHTML=ranking(d.http_failures,{detail:x=>x.name==='none'?'非 HTTP 失败':'HTTP 错误'});
+  $('aiPanel').innerHTML=ranking(d.ai_profiles,{value:'calls',detail:x=>`失败 ${x.failed} · 回退 ${x.fallback} · ${Object.entries(x.latencies||{}).map(y=>y.join(' ')).join(' / ')}`});
+  $('agentPanel').innerHTML=ranking(d.agent_families,{value:'calls',detail:x=>`失败 ${x.failed} · ${Object.entries(x.tools||{}).slice(0,3).map(y=>y.join(' ')).join(' / ')}`});
+  $('versions').innerHTML=ranking(d.versions,{name:'version',detail:x=>`${x.accounts} 账户 · ${x.devices} 设备 · 失败 ${x.failures}`});$('durations').innerHTML=ranking(d.duration_buckets,{detail:x=>`动作耗时档`});
+  $('rows').innerHTML=d.users.length?d.users.map(u=>`<tr><td><b>${esc(u.display_name||'待补充')}</b><br><span class="muted">${esc(u.email||u.id)}</span></td><td>${esc(u.cohort_id||'—')}</td><td class="${u.status==='active'?'status-good':'status-bad'}">${esc(u.status)}</td><td>${u.active_days}</td><td>${u.events}</td><td>${Object.entries(u.features).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`<span class="tag">${esc(label(x[0]))} ${x[1]}</span>`).join('')||'—'}</td><td>${esc((u.last_event_at||u.last_seen_at||'—').slice(0,19))}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">暂无内测账户</td></tr>';
+}
+$('open').onclick=load;$('refresh').onclick=load;$('days').onchange=load;if(sessionStorage.caddieAdminToken)load();
+</script></body></html>

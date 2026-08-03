@@ -33,7 +33,7 @@ test -f "$CADDYFILE" || {
 mkdir -p "$GATEWAY_DIR" "$GATEWAY_DATA_DIR"
 chmod 700 "$GATEWAY_DIR" "$GATEWAY_DATA_DIR"
 
-for file_name in app.py requirements.txt Dockerfile; do
+for file_name in app.py admin_dashboard.html requirements.txt Dockerfile; do
   curl --fail --location --silent --show-error \
     "$RAW_BASE/$file_name" -o "$GATEWAY_DIR/$file_name"
 done

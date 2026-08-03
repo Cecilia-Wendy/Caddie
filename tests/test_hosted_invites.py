@@ -161,7 +161,11 @@ class HostedInviteTests(unittest.TestCase):
         get.return_value.json.return_value = [{
             "event_name": "feature_action_completed",
             "account_id": None,
-            "properties": {"feature": "sources"},
+            "session_id": "session-a",
+            "properties": {
+                "feature": "sources", "action": "analyze",
+                "status": "success", "duration_bucket": "2s_10s",
+            },
             "client_time": "2026-08-04T10:00:00+00:00",
             "app_version": "0.1.7-alpha",
         }]
@@ -180,6 +184,10 @@ class HostedInviteTests(unittest.TestCase):
         self.assertEqual(result.json()["registered_devices"], 1)
         self.assertEqual(result.json()["active_devices"], 1)
         self.assertEqual(result.json()["features"][0]["installations"], 0)
+        self.assertEqual(result.json()["sessions"], 1)
+        self.assertEqual(result.json()["meaningful_rate"], 1.0)
+        self.assertEqual(result.json()["actions"][0]["action"], "analyze")
+        self.assertEqual(result.json()["duration_buckets"][0]["name"], "2s_10s")
         self.assertEqual(result.json()["users"][0]["email"], "mac-test@example.com")
         self.assertEqual(result.json()["users"][0]["features"]["sources"], 1)
 

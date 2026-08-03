@@ -643,7 +643,7 @@ def _analytics_events(days: int) -> list[dict]:
                 f"{SUPABASE_URL}/rest/v1/telemetry_events",
                 headers={**_supabase_headers(), "Range": f"{offset}-{offset + 999}"},
                 params={
-                    "select": "event_name,account_id,device_id,cohort_id,installation_id,properties,client_time,app_version",
+                    "select": "event_name,account_id,device_id,cohort_id,installation_id,session_id,entity_type,properties,client_time,app_version",
                     "client_time": f"gte.{since}",
                     "order": "client_time.desc",
                 },
@@ -696,6 +696,26 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
     failures = 0
     ai_calls = 0
     agent_calls = 0
+    meaningful_events = 0
+    sessions: set[str] = set()
+    versions: dict[str, dict] = {}
+    failure_reasons: dict[str, int] = {}
+    http_failures: dict[str, int] = {}
+    duration_buckets: dict[str, int] = {}
+    action_matrix: dict[str, dict] = {}
+    funnel_definitions = (
+        ("arrive", "启动与浏览"),
+        ("foundation", "完成底稿"),
+        ("track", "建立岗位"),
+        ("ai", "使用 AI"),
+        ("asset", "保存求职资产"),
+        ("interview", "面试与复盘"),
+        ("feedback", "提交反馈"),
+    )
+    funnel: dict[str, dict] = {
+        key: {"key": key, "label": label, "events": 0, "accounts": set()}
+        for key, label in funnel_definitions
+    }
     for event in events:
         name = str(event.get("event_name") or "unknown")
         event_counts[name] = event_counts.get(name, 0) + 1
@@ -714,10 +734,34 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
         props = event.get("properties") or {}
         status = str(props.get("status") or "")
         is_failure = status in {"failed", "error", "timeout"}
+        session_id = str(event.get("session_id") or "")
+        if session_id:
+            sessions.add(session_id)
+        if name not in {"app_started", "view_opened"}:
+            meaningful_events += 1
+        version = str(event.get("app_version") or "unknown")
+        version_item = versions.setdefault(version, {"version": version, "events": 0, "accounts": set(), "devices": set(), "failures": 0})
+        version_item["events"] += 1
+        if account_id:
+            version_item["accounts"].add(account_id)
+        if gateway_device_id in registered_device_ids:
+            version_item["devices"].add(gateway_device_id)
+        version_item["failures"] += int(is_failure)
         if is_failure:
             failures += 1
             day_item["failures"] += 1
+            reason = str(props.get("error_type") or "unknown")
+            failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
+            http_status = str(props.get("http_status") or "none")
+            http_failures[http_status] = http_failures.get(http_status, 0) + 1
         feature = str(props.get("feature") or name)
+        action = str(props.get("action") or name)
+        duration = str(props.get("duration_bucket") or props.get("latency_bucket") or "unknown")
+        duration_buckets[duration] = duration_buckets.get(duration, 0) + 1
+        action_key = f"{feature}:{action}"
+        action_item = action_matrix.setdefault(action_key, {"feature": feature, "action": action, "display": f"{feature} / {action}", "events": 0, "success": 0, "failed": 0})
+        action_item["events"] += 1
+        action_item["failed" if is_failure else "success"] += 1
         feature_item = features.setdefault(feature, {"name": feature, "events": 0, "success": 0, "failed": 0, "users": set(), "installations": set()})
         feature_item["events"] += 1
         feature_item["failed" if is_failure else "success"] += 1
@@ -750,6 +794,26 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
             item["last_event_at"] = item["last_event_at"] or event.get("client_time")
             item["features"][feature] = item["features"].get(feature, 0) + 1
             active_days.setdefault(account_id, set()).add(str(event.get("client_time") or "")[:10])
+
+        funnel_key = None
+        if name in {"app_started", "view_opened", "onboarding_started"}:
+            funnel_key = "arrive"
+        elif name in {"onboarding_completed", "source_added", "source_ingested"}:
+            funnel_key = "foundation"
+        elif name == "job_track_created" or feature in {"job_tracks", "applications"}:
+            funnel_key = "track"
+        elif name == "ai_call_completed":
+            funnel_key = "ai"
+        elif name in {"asset_generated", "asset_saved", "proposed_change_accepted"} or feature in {"assets", "resume"}:
+            funnel_key = "asset"
+        elif feature == "interview":
+            funnel_key = "interview"
+        elif name == "feedback_submitted":
+            funnel_key = "feedback"
+        if funnel_key:
+            funnel[funnel_key]["events"] += 1
+            if account_id:
+                funnel[funnel_key]["accounts"].add(account_id)
     for account_id, item in by_user.items():
         item["active_days"] = len(active_days.get(account_id, set()))
     daily_items = []
@@ -758,6 +822,14 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
     feature_items = []
     for item in sorted(features.values(), key=lambda value: value["events"], reverse=True):
         feature_items.append({**item, "users": len(item["users"]), "installations": len(item["installations"])})
+    funnel_items = [
+        {**funnel[key], "accounts": len(funnel[key]["accounts"])}
+        for key, _ in funnel_definitions
+    ]
+    version_items = [
+        {**item, "accounts": len(item["accounts"]), "devices": len(item["devices"])}
+        for item in sorted(versions.values(), key=lambda value: value["events"], reverse=True)
+    ]
     return {
         "days": days,
         "total_users": len(accounts),
@@ -771,9 +843,18 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
         "ai_calls": ai_calls,
         "agent_calls": agent_calls,
         "failures": failures,
+        "meaningful_events": meaningful_events,
+        "meaningful_rate": round(meaningful_events / len(events), 4) if events else 0,
+        "sessions": len(sessions),
         "event_counts": event_counts,
         "daily": daily_items,
+        "funnel": funnel_items,
         "features": feature_items,
+        "actions": sorted(action_matrix.values(), key=lambda value: value["events"], reverse=True),
+        "failure_reasons": [{"name": key, "events": value} for key, value in sorted(failure_reasons.items(), key=lambda item: item[1], reverse=True)],
+        "http_failures": [{"name": key, "events": value} for key, value in sorted(http_failures.items(), key=lambda item: item[1], reverse=True)],
+        "duration_buckets": [{"name": key, "events": value} for key, value in sorted(duration_buckets.items(), key=lambda item: item[1], reverse=True)],
+        "versions": version_items,
         "ai_profiles": sorted(ai_profiles.values(), key=lambda value: value["calls"], reverse=True),
         "agent_families": sorted(agent_families.values(), key=lambda value: value["calls"], reverse=True),
         "users": list(by_user.values()),
@@ -782,9 +863,14 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
 
 ADMIN_DASHBOARD = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Caddie 内测数据</title>
-<style>:root{--ink:#172033;--sub:#6b7788;--line:#dfe5ec;--blue:#2463eb;--green:#178565;--red:#c34c3b;--amber:#a66b13;--bg:#f4f6f8}*{box-sizing:border-box}body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg)}main{max-width:1320px;margin:0 auto;padding:32px 24px 60px}header.top{display:flex;justify-content:space-between;align-items:end;margin-bottom:20px}h1{margin:0;font-size:28px}h2{margin:0;font-size:17px}p{color:var(--sub);margin:7px 0 0}.toolbar{display:flex;gap:8px}input,button,select{font:inherit;padding:10px 12px;border:1px solid #cbd4df;border-radius:6px;background:white}button{background:var(--blue);color:white;border-color:var(--blue);cursor:pointer}.login,.panel,.metric{background:white;border:1px solid var(--line);border-radius:8px}.login{display:flex;gap:10px;padding:18px}.login input{flex:1}.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:16px 0}.metric{padding:16px}.metric span{display:block;color:var(--sub);font-size:12px}.metric b{display:block;font-size:25px;margin-top:7px}.metric small{color:#8b96a5}.metric.warn b{color:var(--amber)}.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-top:14px}.panel{padding:18px;min-width:0}.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.panel-head span{font-size:12px;color:var(--sub)}.quality{display:flex;gap:14px;align-items:flex-start;border-left:3px solid var(--amber);background:#fff9ed;padding:14px 16px;margin:14px 0}.quality b{white-space:nowrap;color:#75480c}.quality p{margin:0;color:#755d38}.chart{height:190px;display:flex;align-items:flex-end;gap:5px;border-bottom:1px solid var(--line);padding-top:10px}.bar-col{flex:1;min-width:4px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}.bar{width:100%;max-width:28px;min-height:2px;background:var(--blue);border-radius:3px 3px 0 0}.bar-col label{font-size:10px;color:#8a96a5;height:14px}.legend{display:flex;gap:16px;margin-top:12px;color:var(--sub);font-size:12px}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--blue)}.dot.green{background:var(--green)}.dot.red{background:var(--red)}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e8edf2;vertical-align:top}th{color:var(--sub);font-size:11px;font-weight:600}td b{font-size:13px}.muted{color:#8792a1;font-size:12px}.tag{display:inline-block;background:#eef4ff;color:#245ac7;padding:3px 7px;border-radius:5px;margin:2px}.progress{height:6px;background:#edf1f5;border-radius:4px;overflow:hidden;margin-top:7px}.progress i{display:block;height:100%;background:var(--blue)}.rank{display:grid;gap:13px}.rank-row header{display:flex;justify-content:space-between}.rank-row small{color:var(--sub)}.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}.empty{color:var(--sub);padding:24px 0;text-align:center}#content{display:none}.section-title{margin-top:24px}.full{grid-column:1/-1}.status-good{color:var(--green)}.status-bad{color:var(--red)}@media(max-width:980px){.metrics{grid-template-columns:repeat(3,1fr)}.grid,.split{grid-template-columns:1fr}}@media(max-width:620px){main{padding:20px 14px}.metrics{grid-template-columns:repeat(2,1fr)}.login{display:block}.login>*{width:100%;margin:4px 0}header.top{display:block}.toolbar{margin-top:12px}}</style></head>
-<body><main><header class="top"><div><h1>Caddie 内测数据</h1><p>回答谁在用、用了什么、哪里失败，以及 AI 和外部 Agent 是否真正带来价值。</p></div><div class="toolbar"><select id="days"><option value="7">7 天</option><option value="14" selected>14 天</option><option value="30">30 天</option><option value="90">90 天</option></select><button id="refresh" onclick="load()">刷新</button></div></header><section class="login" id="login"><input id="token" type="password" placeholder="Gateway 管理 Token"><button onclick="load()">打开数据台</button></section><div id="content"><div id="quality"></div><section class="metrics"><div class="metric"><span>内测账户</span><b id="users">0</b><small>已发放资格</small></div><div class="metric"><span>活跃设备</span><b id="devices">0</b><small id="identified">Gateway 已识别</small></div><div class="metric"><span>行为事件</span><b id="events">0</b><small id="cap"></small></div><div class="metric"><span>AI 调用</span><b id="aiCalls">0</b><small>模型能力使用</small></div><div class="metric"><span>外部 Agent</span><b id="agentCalls">0</b><small>MCP / 工具调用</small></div><div class="metric warn"><span>失败事件</span><b id="failures">0</b><small id="failureRate">失败率 0%</small></div></section><section class="grid"><div class="panel"><div class="panel-head"><h2>活跃与使用趋势</h2><span>按日粗粒度事件</span></div><div class="chart" id="dailyChart"></div><div class="legend"><span><i class="dot"></i>事件量</span><span><i class="dot green"></i>Gateway 设备</span><span><i class="dot red"></i>失败</span></div></div><div class="panel"><div class="panel-head"><h2>产品功能使用</h2><span>前 8 项</span></div><div class="rank" id="features"></div></div><div class="panel"><div class="panel-head"><h2>AI 调用质量</h2><span>按任务档位</span></div><div id="aiPanel"></div></div><div class="panel"><div class="panel-head"><h2>外部 Agent 使用</h2><span>按 Agent 类型</span></div><div id="agentPanel"></div></div></section><h2 class="section-title">内测用户</h2><section class="panel" style="margin-top:10px;overflow:auto"><table><thead><tr><th>用户</th><th>批次</th><th>账户状态</th><th>活跃天数</th><th>可归因事件</th><th>主要使用</th><th>最后连接</th></tr></thead><tbody id="rows"></tbody></table></section></div></main>
+<style>:root{--ink:#172033;--sub:#6b7788;--line:#dfe5ec;--blue:#2463eb;--green:#178565;--red:#c34c3b;--amber:#a66b13;--bg:#f4f6f8}*{box-sizing:border-box}body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg)}main{max-width:1320px;margin:0 auto;padding:32px 24px 60px}header.top{display:flex;justify-content:space-between;align-items:end;margin-bottom:20px}h1{margin:0;font-size:28px}h2{margin:0;font-size:17px}p{color:var(--sub);margin:7px 0 0}.toolbar{display:flex;gap:8px}input,button,select{font:inherit;padding:10px 12px;border:1px solid #cbd4df;border-radius:6px;background:white}button{background:var(--blue);color:white;border-color:var(--blue);cursor:pointer}.login,.panel,.metric{background:white;border:1px solid var(--line);border-radius:8px}.login{display:flex;gap:10px;padding:18px}.login input{flex:1}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.metric{padding:16px}.metric span{display:block;color:var(--sub);font-size:12px}.metric b{display:block;font-size:25px;margin-top:7px}.metric small{color:#8b96a5}.metric.warn b{color:var(--amber)}.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-top:14px}.panel{padding:18px;min-width:0}.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.panel-head span{font-size:12px;color:var(--sub)}.quality{display:flex;gap:14px;align-items:flex-start;border-left:3px solid var(--amber);background:#fff9ed;padding:14px 16px;margin:14px 0}.quality b{white-space:nowrap;color:#75480c}.quality p{margin:0;color:#755d38}.chart{height:190px;display:flex;align-items:flex-end;gap:5px;border-bottom:1px solid var(--line);padding-top:10px}.bar-col{flex:1;min-width:4px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}.bar{width:100%;max-width:28px;min-height:2px;background:var(--blue);border-radius:3px 3px 0 0}.bar-col label{font-size:10px;color:#8a96a5;height:14px}.legend{display:flex;gap:16px;margin-top:12px;color:var(--sub);font-size:12px}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--blue)}.dot.green{background:var(--green)}.dot.red{background:var(--red)}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e8edf2;vertical-align:top}th{color:var(--sub);font-size:11px;font-weight:600}td b{font-size:13px}.muted{color:#8792a1;font-size:12px}.tag{display:inline-block;background:#eef4ff;color:#245ac7;padding:3px 7px;border-radius:5px;margin:2px}.progress{height:6px;background:#edf1f5;border-radius:4px;overflow:hidden;margin-top:7px}.progress i{display:block;height:100%;background:var(--blue)}.rank{display:grid;gap:13px}.rank-row header{display:flex;justify-content:space-between}.rank-row small{color:var(--sub)}.funnel{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.funnel-step{position:relative;padding:14px 12px;background:#f7f9fc;border:1px solid var(--line);border-radius:6px;min-width:0}.funnel-step:after{content:'›';position:absolute;right:-8px;top:28px;color:#9aa6b4;font-size:22px;z-index:2}.funnel-step:last-child:after{display:none}.funnel-step b{display:block;font-size:20px;margin:7px 0}.funnel-step span,.funnel-step small{display:block;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}.empty{color:var(--sub);padding:24px 0;text-align:center}#content{display:none}.section-title{margin-top:24px}.full{grid-column:1/-1}.status-good{color:var(--green)}.status-bad{color:var(--red)}@media(max-width:980px){.metrics{grid-template-columns:repeat(2,1fr)}.grid,.split{grid-template-columns:1fr}.funnel{grid-template-columns:repeat(2,1fr)}.funnel-step:after{display:none}}@media(max-width:620px){main{padding:20px 14px}.metrics{grid-template-columns:1fr 1fr}.login{display:block}.login>*{width:100%;margin:4px 0}header.top{display:block}.toolbar{margin-top:12px}}</style></head>
+<body><main><header class="top"><div><h1>Caddie 内测数据</h1><p>回答谁在用、用了什么、哪里失败，以及 AI 和外部 Agent 是否真正带来价值。</p></div><div class="toolbar"><select id="days"><option value="7">7 天</option><option value="14" selected>14 天</option><option value="30">30 天</option><option value="90">90 天</option></select><button id="refresh" onclick="load()">刷新</button></div></header><section class="login" id="login"><input id="token" type="password" placeholder="Gateway 管理 Token"><button onclick="load()">打开数据台</button></section><div id="content"><div id="quality"></div><section class="metrics"><div class="metric"><span>内测账户</span><b id="users">0</b><small>已发放资格</small></div><div class="metric"><span>活跃设备</span><b id="devices">0</b><small id="identified">Gateway 已识别</small></div><div class="metric"><span>行为事件</span><b id="events">0</b><small id="cap"></small></div><div class="metric"><span>有效行为</span><b id="meaningful">0%</b><small>排除启动和浏览</small></div><div class="metric"><span>会话数</span><b id="sessions">0</b><small>可识别会话</small></div><div class="metric"><span>AI 调用</span><b id="aiCalls">0</b><small>模型能力使用</small></div><div class="metric"><span>外部 Agent</span><b id="agentCalls">0</b><small>MCP / 工具调用</small></div><div class="metric warn"><span>失败事件</span><b id="failures">0</b><small id="failureRate">失败率 0%</small></div></section><section class="grid"><div class="panel full"><div class="panel-head"><h2>求职闭环路径</h2><span>事件量 / 已归因账户</span></div><div class="funnel" id="funnel"></div></div><div class="panel"><div class="panel-head"><h2>活跃与使用趋势</h2><span>按日粗粒度事件</span></div><div class="chart" id="dailyChart"></div><div class="legend"><span><i class="dot"></i>事件量</span><span><i class="dot green"></i>Gateway 设备</span><span><i class="dot red"></i>失败</span></div></div><div class="panel"><div class="panel-head"><h2>产品功能使用</h2><span>前 8 项</span></div><div class="rank" id="features"></div></div><div class="panel"><div class="panel-head"><h2>功能动作与成功率</h2><span>前 10 项</span></div><div class="rank" id="actions"></div></div><div class="panel"><div class="panel-head"><h2>失败诊断</h2><span>原因 / HTTP 状态</span></div><div class="split"><div id="failureReasons"></div><div id="httpFailures"></div></div></div><div class="panel"><div class="panel-head"><h2>AI 调用质量</h2><span>按任务档位</span></div><div id="aiPanel"></div></div><div class="panel"><div class="panel-head"><h2>外部 Agent 使用</h2><span>按 Agent 类型</span></div><div id="agentPanel"></div></div><div class="panel"><div class="panel-head"><h2>版本分布</h2><span>发现旧版本与回归</span></div><div class="rank" id="versions"></div></div><div class="panel"><div class="panel-head"><h2>耗时分布</h2><span>接口与 AI 合并视图</span></div><div class="rank" id="durations"></div></div></section><h2 class="section-title">内测用户</h2><section class="panel" style="margin-top:10px;overflow:auto"><table><thead><tr><th>用户</th><th>批次</th><th>账户状态</th><th>活跃天数</th><th>可归因事件</th><th>主要使用</th><th>最后连接</th></tr></thead><tbody id="rows"></tbody></table></section></div></main>
 <script>const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const apiBase=location.pathname.startsWith('/gateway/')?'/gateway':'';const labels={app_started:'启动 Caddie',view_opened:'打开页面',feature_action_completed:'完成功能动作',ai_call_completed:'AI 调用',external_agent_tool_completed:'外部 Agent',source_added:'添加资料',source_ingested:'资料入库',job_track_created:'建立岗位',asset_generated:'生成资产',feedback_submitted:'提交反馈',sources:'资料库',interview:'面试准备',applications:'投递管理'};const name=x=>labels[x]||x||'其他';function rank(items,valueKey,labelKey){const max=Math.max(1,...items.map(x=>x[valueKey]||0));return items.length?items.map(x=>`<div class="rank-row"><header><b>${esc(name(x[labelKey]))}</b><span>${x[valueKey]}</span></header><div class="progress"><i style="width:${Math.round((x[valueKey]||0)/max*100)}%"></i></div><small>${x.failed?`失败 ${x.failed}`:`涉及 ${x.installations||0} 台 Gateway 设备`}</small></div>`).join(''):'<div class="empty">暂无数据</div>'}async function load(){const token=document.querySelector('#token').value||sessionStorage.caddieAdminToken;if(!token)return;sessionStorage.caddieAdminToken=token;refresh.disabled=true;const r=await fetch(apiBase+'/admin/v1/analytics/overview?days='+days.value,{headers:{Authorization:'Bearer '+token}});refresh.disabled=false;if(!r.ok){let message='读取失败';try{message=(await r.json()).detail||message}catch{}alert(message);return}const d=await r.json();login.style.display='none';content.style.display='block';users.textContent=d.total_users;devices.textContent=d.active_devices;identified.textContent=`已登记 ${d.registered_devices} · 本期活跃 ${d.active_devices}`;events.textContent=d.total_events;cap.textContent=d.result_capped?'已达查询上限':'当前时间窗口';aiCalls.textContent=d.ai_calls;agentCalls.textContent=d.agent_calls;failures.textContent=d.failures;failureRate.textContent=`失败率 ${d.total_events?Math.round(d.failures/d.total_events*1000)/10:0}%`;quality.innerHTML=d.unattributed_events?`<div class="quality"><b>数据口径提示</b><p>${d.unattributed_events} 条历史事件来自身份系统上线前，可统计功能使用，但不能归到具体用户。其中的 ${d.legacy_installation_ids} 个本地安装标识可能来自同一台 Mac 的不同版本、数据目录或开发环境，已不再计为真实设备。</p></div>`:'';const max=Math.max(1,...d.daily.map(x=>x.events));dailyChart.innerHTML=d.daily.length?d.daily.map((x,i)=>`<div class="bar-col" title="${x.date} · ${x.events} 事件 · ${x.installations} Gateway 设备 · ${x.failures} 失败"><div class="bar" style="height:${Math.max(3,Math.round(x.events/max*150))}px;${x.failures?'background:#c34c3b':''}"></div><label>${i%Math.max(1,Math.ceil(d.daily.length/7))===0?x.date.slice(5):''}</label></div>`).join(''):'<div class="empty">暂无趋势数据</div>';features.innerHTML=rank(d.features.slice(0,8),'events','name');aiPanel.innerHTML=rank(d.ai_profiles,'calls','name');agentPanel.innerHTML=rank(d.agent_families,'calls','name');rows.innerHTML=d.users.length?d.users.map(u=>`<tr><td><b>${esc(u.display_name||'待补充')}</b><br><span class="muted">${esc(u.email||u.id)}</span></td><td>${esc(u.cohort_id||'—')}</td><td class="${u.status==='active'?'status-good':'status-bad'}">${esc(u.status)}</td><td>${u.active_days}</td><td>${u.events}</td><td>${Object.entries(u.features).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`<span class="tag">${esc(name(x[0]))} ${x[1]}</span>`).join('')||'—'}</td><td>${esc((u.last_event_at||u.last_seen_at||'—').slice(0,19))}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">暂无内测账户</td></tr>'}days.onchange=load;if(sessionStorage.caddieAdminToken)load();</script></body></html>"""
+
+
+_dashboard_path = Path(__file__).with_name("admin_dashboard.html")
+if _dashboard_path.exists():
+    ADMIN_DASHBOARD = _dashboard_path.read_text(encoding="utf-8")
 
 
 @app.get("/admin", response_class=HTMLResponse)
