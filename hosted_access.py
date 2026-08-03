@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
 import uuid
+import base64
+import ctypes
 from pathlib import Path
 
 import requests
@@ -15,6 +18,7 @@ DATA_DIR = Path(os.environ.get("CADDIE_DATA_DIR") or (Path.home() / ".caddie"))
 STATE_PATH = DATA_DIR / "hosted_access.json"
 KEYCHAIN_SERVICE = "app.caddie.gateway"
 KEYCHAIN_MARKER = "__caddie_keychain__"
+WINDOWS_CREDENTIAL_KEY = "credential_dpapi"
 DEFAULT_BASE_URL = "https://43-128-7-135.sslip.io/gateway/v1"
 
 
@@ -40,7 +44,8 @@ def device_id() -> str:
     state = _read_state()
     value = str(state.get("device_id") or "")
     if not value:
-        value = "mac_" + uuid.uuid4().hex
+        prefix = "win" if os.name == "nt" else "mac" if platform.system() == "Darwin" else "device"
+        value = prefix + "_" + uuid.uuid4().hex
         state["device_id"] = value
         _write_state(state)
     return value
@@ -52,9 +57,54 @@ def _security(*args: str) -> subprocess.CompletedProcess:
     )
 
 
+class _DataBlob(ctypes.Structure):
+    _fields_ = [("cbData", ctypes.c_uint32), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
+
+
+def _windows_protect(value: str) -> str:
+    raw = value.encode("utf-8")
+    source_buffer = ctypes.create_string_buffer(raw)
+    source = _DataBlob(len(raw), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_ubyte)))
+    protected = _DataBlob()
+    if not ctypes.windll.crypt32.CryptProtectData(
+        ctypes.byref(source), "Caddie", None, None, None, 0,
+        ctypes.byref(protected),
+    ):
+        raise HostedAccessError("Windows 无法加密内测凭证")
+    try:
+        data = ctypes.string_at(protected.pbData, protected.cbData)
+        return base64.b64encode(data).decode("ascii")
+    finally:
+        ctypes.windll.kernel32.LocalFree(protected.pbData)
+
+
+def _windows_unprotect(value: str) -> str:
+    try:
+        raw = base64.b64decode(value)
+        source_buffer = ctypes.create_string_buffer(raw)
+        source = _DataBlob(len(raw), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_ubyte)))
+        plain = _DataBlob()
+        if not ctypes.windll.crypt32.CryptUnprotectData(
+            ctypes.byref(source), None, None, None, None, 0,
+            ctypes.byref(plain),
+        ):
+            return ""
+        try:
+            return ctypes.string_at(plain.pbData, plain.cbData).decode("utf-8")
+        finally:
+            ctypes.windll.kernel32.LocalFree(plain.pbData)
+    except (ValueError, OSError):
+        return ""
+
+
 def store_credential(credential: str) -> None:
     if not credential:
         raise HostedAccessError("服务端没有返回设备凭证")
+    if os.name == "nt":
+        state = _read_state()
+        state[WINDOWS_CREDENTIAL_KEY] = _windows_protect(credential)
+        _write_state(state)
+        return
     result = _security(
         "add-generic-password", "-U", "-a", device_id(), "-s", KEYCHAIN_SERVICE,
         "-w", credential,
@@ -67,6 +117,8 @@ def credential() -> str:
     override = os.environ.get("CADDIE_HOSTED_CREDENTIAL", "").strip()
     if override:
         return override
+    if os.name == "nt":
+        return _windows_unprotect(str(_read_state().get(WINDOWS_CREDENTIAL_KEY) or ""))
     result = _security(
         "find-generic-password", "-a", device_id(), "-s", KEYCHAIN_SERVICE, "-w"
     )
@@ -74,6 +126,11 @@ def credential() -> str:
 
 
 def clear_credential() -> None:
+    if os.name == "nt":
+        state = _read_state()
+        state.pop(WINDOWS_CREDENTIAL_KEY, None)
+        _write_state(state)
+        return
     _security("delete-generic-password", "-a", device_id(), "-s", KEYCHAIN_SERVICE)
 
 
@@ -84,7 +141,7 @@ def activate(invite_code: str, base_url: str = DEFAULT_BASE_URL) -> dict:
             json={
                 "invite_code": invite_code.strip(),
                 "device_id": device_id(),
-                "device_name": "Mac",
+                "device_name": platform.system() or "Desktop",
             },
             timeout=20,
         )
