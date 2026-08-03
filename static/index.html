@@ -9490,17 +9490,26 @@ const MARKETING_NATIVE_STAGES=[
     {selector:'.iv-question-detail header',action:'observe',caption:'查看问题与面试官意图'},
     {selector:'.iv-question-answer',action:'observe',caption:'核对当时的真实回答'},
     {selector:'.iv-classify-panel',action:'observe',caption:'确认考察能力、关联经历与追问角度'}]},
-  {label:'反馈回流',title:'把面试追问真正写回刚才的项目',detail:'正在使用正式项目面试准备流程',steps:[
+  {label:'反馈回流',title:'把真实面试题回流项目，再把批改后的答案带回来',detail:'正在使用正式真题与逐题批改流程',steps:[
     {selector:'#bigMask .modal-close',optional:true,caption:'关闭逐题复盘，继续完成回流'},
     {selector:'#nav button[data-v="projects"]',caption:'回到正式职业档案'},
     {selector:'.exp-company-card',matchText:'澄海科技',caption:'打开刚才写入的真实经历'},
     {selector:'.experience-project-row',matchText:'用户增长漏斗分析',caption:'回到刚才写入的真实项目'},
     {selector:'.proj-tab',matchText:'面试准备',caption:'打开项目的正式面试准备页'},
-    {target:'add-followup',caption:'点击真实「加一条」'},
-    {fill:'#fu_q',value:'建档完成率为什么会提升？',caption:'写入这轮面试的真实追问'},
-    {fill:'#fu_c',value:'数据方法',caption:'归入项目的数据方法'},
-    {selector:'#bigBody button.btn.sm',matchText:'保存',caption:'确认把问题回流到项目'},
-    {selector:'.follow-row',matchText:'建档完成率为什么会提升',caption:'查看已经写回项目的面试问题'}]}
+    {selector:'.project-real-questions .follow-row',caption:'面试真题已经回流到刚才的项目'},
+    {selector:'.project-real-questions .follow-answer',action:'observe',caption:'展开查看当时的真实回答'},
+    {selector:'.project-real-questions .follow-tools button',matchText:'查看完整复盘',caption:'进入这道题的完整逐题复盘'},
+    {selector:'.iv-deep-coach-head',action:'observe',caption:'查看面试官意图与本题批改结论'},
+    {selector:'.iv-deep-coach-head button',matchText:'教练工作台',caption:'打开教练工作台继续讨论'},
+    {selector:'.iv-coach-thread-empty button',matchText:'解释原回答的问题',caption:'把分歧带进教练台继续校准'},
+    {selector:'.iv-coach-composer',action:'observe',caption:'教练已读取题目、真实回答与批改基线'},
+    {selector:'.iv-coach-workspace-head button',matchText:'关闭工作台',caption:'回到完整批改文档'},
+    {selector:'.iv-coach-reference button',matchText:'采用到左侧继续编辑',caption:'把参考答法采用到左侧答案'},
+    {selector:'#ivQuestionAnswer',action:'observe',caption:'参考答法已进入正式答案编辑器'},
+    {selector:'.iv-answer-card-head button',matchText:'保存答案',caption:'保存为新的答案版本'},
+    {selector:'.iv-text-back',matchText:'返回我的经历',caption:'回到刚才的项目查看更新结果'},
+    {selector:'.project-real-questions .follow-row',caption:'重新打开项目中的这道真实面试题'},
+    {selector:'.project-real-questions .follow-answer',action:'observe',caption:'更新后的答案已回流并保留在项目中'}]}
 ];
 let marketingNativeStage=0,marketingNativeStep=0,marketingNativeTimer=null,marketingNativePlaying=true,marketingNativeRun=0;
 function marketingDemoPointer(){
@@ -9583,12 +9592,34 @@ async function prepareMarketingTrackStory(run){
   if(run!==marketingNativeRun)return false;
   STATE.trackOpen=null;STATE.companyOpen=null;STATE.tracksTab='targets';return true;
 }
+async function prepareMarketingFeedbackStory(run){
+  const stage=MARKETING_NATIVE_STAGES[3];stage.detail='正在把一条真实面试题关联到刚才的项目';renderMarketingNativeController();
+  try{
+    const experiences=await api('/experiences');let experience=experiences.find(item=>(item.company||'').trim()==='澄海科技');
+    if(!experience){const created=await api('/experiences',{method:'POST',body:JSON.stringify({company:'澄海科技',role:'产品分析实习生',start_date:'2025-07-01',end_date:'2025-10-31'})});experience={id:created.id,company:'澄海科技'};}
+    let detail=await api('/experiences/'+experience.id),project=(detail.projects||[]).find(item=>(item.name||'').trim()==='用户增长漏斗分析');
+    if(!project){const created=await api('/experiences/'+experience.id+'/projects',{method:'POST',body:JSON.stringify({name:'用户增长漏斗分析',one_liner:'重构关键建档漏斗，完成率从 52% 提升到 67%',technologies:'SQL, 用户研究, 漏斗分析',keywords:'增长分析, 转化漏斗, 用户访谈',document:'## 背景\n负责分析建档流程中的关键流失点。\n\n## 行动\n使用 SQL 重建转化漏斗，并结合用户访谈定位阻塞环节。\n\n## 结果\n推动关键流程完成率从 52% 提升到 67%。'})});project={id:created.id,name:'用户增长漏斗分析'};}
+    const library=await api('/v2/interview-library'),questions=library?.data?.questions||library?.questions||[];
+    const question=questions.find(item=>item.answer_workspace?.question_coaching&&item.answer_workspace?.current_answer)
+      ||questions.find(item=>item.answer_workspace?.question_coaching);
+    if(!question)throw new Error('演示数据中还没有完成逐题批改的真实面试题');
+    const tags=(question.tag_items||[]).map(item=>({type:item.tag_type||item.type||'主题',value:item.tag_value||item.value||'',source:item.source||'ai',confirmed:!!item.confirmed})).filter(item=>item.value);
+    await api('/v2/interview-questions/'+question.id+'/classification',{method:'PUT',body:JSON.stringify({
+      question_type:question.question_type||'项目深挖',ability_key:question.ability_key||'事实与证据',intent:question.intent||null,tags,
+      links:[{entity_type:'project',entity_id:project.id,entity_title:project.name,relation:'asked_about',aspect:'结果与影响',source:'user',confirmed:true}],confirmed:true
+    })});
+    STATE.marketingQuestionId=question.id;
+  }catch(e){stage.detail='无法准备真题回流：'+e.message;renderMarketingNativeController();return false;}
+  if(run!==marketingNativeRun)return false;
+  Object.assign(STATE,{projectOpen:null,expView:'overview',expCompanyId:null,expTab:'facts',projTab:'doc',followupFilter:'all',followupGrouped:false});
+  return true;
+}
 async function playMarketingStage(index,userInitiated=false){
   stopMarketingNativeTour();marketingNativeRun+=1;const run=marketingNativeRun;
   marketingNativeStage=(index+MARKETING_NATIVE_STAGES.length)%MARKETING_NATIVE_STAGES.length;marketingNativeStep=0;renderMarketingNativeController();
   if(marketingNativeStage===0){if(!await prepareMarketingAgentStory(run))return;}
   else if(marketingNativeStage===1){if(!await prepareMarketingTrackStory(run))return;}
-  else if(marketingNativeStage===3){Object.assign(STATE,{projectOpen:null,expView:'overview',expCompanyId:null,expTab:'facts',projTab:'doc',followupFilter:'all',followupGrouped:false});}
+  else if(marketingNativeStage===3){if(!await prepareMarketingFeedbackStory(run))return;}
   else if(MARKETING_NATIVE_STAGES[marketingNativeStage].reset){if(!await resetMarketingStoryData(run))return;}
   for(const step of MARKETING_NATIVE_STAGES[marketingNativeStage].steps){if(!marketingNativePlaying&& !userInitiated)break;marketingNativeStep+=1;if(!await performMarketingStep(step,run))return}
   if(run!==marketingNativeRun)return;marketingNativeStep=0;renderMarketingNativeController();
