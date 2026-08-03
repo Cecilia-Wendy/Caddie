@@ -9,10 +9,17 @@ import time
 import threading
 import traceback
 import webbrowser
+from pathlib import Path
 
 PORT = int(os.environ.get("CADDIE_PORT", "8766"))
 HOST = os.environ.get("CADDIE_HOST", "127.0.0.1")
 URL = f"http://{HOST}:{PORT}"
+
+
+def desktop_log_path():
+    path = Path.home() / ".caddie" / "logs" / "desktop.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def console_write(message: str, *, error: bool = False):
@@ -46,13 +53,35 @@ def start_server():
     except Exception:
         details = traceback.format_exc()
         console_write(details, error=True)
-        diagnostic_path = os.environ.get("CADDIE_STARTUP_LOG")
-        if diagnostic_path:
-            try:
-                with open(diagnostic_path, "w", encoding="utf-8") as handle:
-                    handle.write(details)
-            except OSError:
-                pass
+        diagnostic_path = os.environ.get("CADDIE_STARTUP_LOG") or desktop_log_path()
+        try:
+            with open(diagnostic_path, "a", encoding="utf-8") as handle:
+                handle.write(details + "\n")
+        except OSError:
+            pass
+
+
+def start_server_process():
+    """Run the packaged Windows server outside the WebView GUI process."""
+    log_path = desktop_log_path()
+    env = os.environ.copy()
+    env["CADDIE_STARTUP_LOG"] = str(log_path)
+    command = [sys.executable, "--server"]
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    log_handle = open(log_path, "a", encoding="utf-8")
+    try:
+        process = subprocess.Popen(
+            command,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=log_handle,
+            stderr=log_handle,
+            creationflags=creationflags,
+        )
+    except Exception:
+        log_handle.close()
+        raise
+    return process, log_handle
 
 
 def wait_for_server(timeout=15):
@@ -68,6 +97,9 @@ def wait_for_server(timeout=15):
 
 
 def main():
+    if "--server" in sys.argv:
+        start_server()
+        return
     if "--mcp" in sys.argv:
         from caddie_mcp import main as run_mcp
         run_mcp()
@@ -89,11 +121,21 @@ def main():
     console_write("启动 Caddie 求职管家...")
     # The optional launch agent may already own the local server. Reusing it
     # avoids a noisy bind failure and makes reopening the desktop shell cheap.
+    server_process = None
+    server_log = None
     if not wait_for_server(timeout=0.8):
-        threading.Thread(target=start_server, daemon=True).start()
+        if getattr(sys, "frozen", False) and sys.platform == "win32":
+            server_process, server_log = start_server_process()
+        else:
+            threading.Thread(target=start_server, daemon=True).start()
 
     if not wait_for_server():
-        console_write(f"服务器启动失败，请检查端口 {PORT} 是否被占用", error=True)
+        if server_process is not None:
+            server_process.terminate()
+        console_write(
+            f"服务器启动失败，请检查 {desktop_log_path()}",
+            error=True,
+        )
         sys.exit(1)
     console_write(f"服务已就绪：{URL}")
 
@@ -146,6 +188,15 @@ def main():
                 time.sleep(1)
         except KeyboardInterrupt:
             console_write("Caddie 已关闭")
+    finally:
+        if server_process is not None and server_process.poll() is None:
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+        if server_log is not None:
+            server_log.close()
 
 
 if __name__ == "__main__":
