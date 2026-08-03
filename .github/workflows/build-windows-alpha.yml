@@ -52,11 +52,13 @@ jobs:
         run: |
           $env:CADDIE_HEADLESS = "1"
           $env:CADDIE_DATA_DIR = Join-Path $env:RUNNER_TEMP "caddie-smoke"
+          $env:CADDIE_STARTUP_LOG = Join-Path $env:RUNNER_TEMP "caddie-startup.log"
           $process = Start-Process -FilePath ".\dist\Caddie\Caddie.exe" -PassThru
           $healthy = $false
           try {
             for ($attempt = 0; $attempt -lt 90; $attempt++) {
               if ($process.HasExited) {
+                if (Test-Path $env:CADDIE_STARTUP_LOG) { Get-Content $env:CADDIE_STARTUP_LOG }
                 throw "Packaged desktop exited before the server became ready: $($process.ExitCode)"
               }
               try {
@@ -68,7 +70,10 @@ jobs:
               } catch {}
               Start-Sleep -Seconds 1
             }
-            if (-not $healthy) { throw "Packaged desktop server was not ready within 90 seconds" }
+            if (-not $healthy) {
+              if (Test-Path $env:CADDIE_STARTUP_LOG) { Get-Content $env:CADDIE_STARTUP_LOG }
+              throw "Packaged desktop server was not ready within 90 seconds"
+            }
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
