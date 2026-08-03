@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import threading
+import traceback
 import webbrowser
 
 PORT = int(os.environ.get("CADDIE_PORT", "8766"))
@@ -15,9 +16,20 @@ URL = f"http://{HOST}:{PORT}"
 
 
 def start_server():
-    import uvicorn
-    from server import app
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning", reload=False)
+    try:
+        import uvicorn
+        from server import app
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning", reload=False)
+    except Exception:
+        details = traceback.format_exc()
+        print(details, file=sys.stderr)
+        diagnostic_path = os.environ.get("CADDIE_STARTUP_LOG")
+        if diagnostic_path:
+            try:
+                with open(diagnostic_path, "w", encoding="utf-8") as handle:
+                    handle.write(details)
+            except OSError:
+                pass
 
 
 def wait_for_server(timeout=15):
