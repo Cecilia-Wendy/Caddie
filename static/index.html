@@ -5345,6 +5345,7 @@ function returnToExperienceQuestion(origin={}){
   STATE.projectOpen=origin.projectId||STATE.projectOpen;
   STATE.projTab=origin.projTab||'followups';
   STATE.interviewQuestionOpen=origin.questionId||STATE.interviewQuestionOpen;
+  STATE.followupOpen=origin.questionId||STATE.followupOpen;
   localStorage.setItem('caddie-current-view','projects');
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==='projects'));
   render();
@@ -9508,7 +9509,6 @@ const MARKETING_NATIVE_STAGES=[
     {selector:'#ivQuestionAnswer',action:'observe',caption:'参考答法已进入正式答案编辑器'},
     {selector:'.iv-answer-card-head button',matchText:'保存答案',caption:'保存为新的答案版本'},
     {selector:'.iv-text-back',matchText:'返回我的经历',caption:'回到刚才的项目查看更新结果'},
-    {selector:'.project-real-questions .follow-top',caption:'重新打开项目中的这道真实面试题'},
     {selector:'.project-real-questions .follow-answer',action:'observe',caption:'更新后的答案已回流并保留在项目中'}]}
 ];
 let marketingNativeStage=0,marketingNativeStep=0,marketingNativeTimer=null,marketingNativePlaying=true,marketingNativeRun=0;
