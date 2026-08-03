@@ -636,20 +636,25 @@ def _supabase_headers() -> dict:
 def _analytics_events(days: int) -> list[dict]:
     days = max(1, min(int(days), 90))
     since = _iso(_now() - timedelta(days=days))
+    events: list[dict] = []
     try:
-        response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/telemetry_events",
-            headers=_supabase_headers(),
-            params={
-                "select": "event_name,account_id,properties,client_time,app_version",
-                "client_time": f"gte.{since}",
-                "order": "client_time.desc",
-                "limit": "10000",
-            },
-            timeout=(8, 30),
-        )
-        response.raise_for_status()
-        return response.json()
+        for offset in range(0, 10000, 1000):
+            response = requests.get(
+                f"{SUPABASE_URL}/rest/v1/telemetry_events",
+                headers={**_supabase_headers(), "Range": f"{offset}-{offset + 999}"},
+                params={
+                    "select": "event_name,account_id,device_id,cohort_id,installation_id,properties,client_time,app_version",
+                    "client_time": f"gte.{since}",
+                    "order": "client_time.desc",
+                },
+                timeout=(8, 30),
+            )
+            response.raise_for_status()
+            batch = response.json()
+            events.extend(batch)
+            if len(batch) < 1000:
+                break
+        return events
     except requests.RequestException as exc:
         raise HTTPException(502, "暂时无法读取产品分析数据") from exc
 
@@ -672,35 +677,103 @@ def analytics_overview(days: int = 14, authorization: str | None = Header(None))
     }
     event_counts: dict[str, int] = {}
     active_days: dict[str, set[str]] = {}
+    installations: set[str] = set()
+    identified_installations: set[str] = set()
+    daily: dict[str, dict] = {}
+    features: dict[str, dict] = {}
+    ai_profiles: dict[str, dict] = {}
+    agent_families: dict[str, dict] = {}
+    failures = 0
+    ai_calls = 0
+    agent_calls = 0
     for event in events:
         name = str(event.get("event_name") or "unknown")
         event_counts[name] = event_counts.get(name, 0) + 1
         account_id = str(event.get("account_id") or "")
+        installation_id = str(event.get("installation_id") or "")
+        if installation_id:
+            installations.add(installation_id)
+            if account_id:
+                identified_installations.add(installation_id)
+        day = str(event.get("client_time") or "")[:10]
+        day_item = daily.setdefault(day, {"date": day, "events": 0, "ai": 0, "agents": 0, "failures": 0, "installations": set()})
+        day_item["events"] += 1
+        if installation_id:
+            day_item["installations"].add(installation_id)
+        props = event.get("properties") or {}
+        status = str(props.get("status") or "")
+        is_failure = status in {"failed", "error", "timeout"}
+        if is_failure:
+            failures += 1
+            day_item["failures"] += 1
+        feature = str(props.get("feature") or name)
+        feature_item = features.setdefault(feature, {"name": feature, "events": 0, "success": 0, "failed": 0, "users": set(), "installations": set()})
+        feature_item["events"] += 1
+        feature_item["failed" if is_failure else "success"] += 1
+        if account_id:
+            feature_item["users"].add(account_id)
+        if installation_id:
+            feature_item["installations"].add(installation_id)
+        if name == "ai_call_completed":
+            ai_calls += 1
+            day_item["ai"] += 1
+            profile = str(props.get("profile") or props.get("model_family") or "unknown")
+            ai_item = ai_profiles.setdefault(profile, {"name": profile, "calls": 0, "failed": 0, "fallback": 0, "latencies": {}})
+            ai_item["calls"] += 1
+            ai_item["failed"] += int(is_failure)
+            ai_item["fallback"] += int(bool(props.get("fallback_used")))
+            latency = str(props.get("latency_bucket") or "unknown")
+            ai_item["latencies"][latency] = ai_item["latencies"].get(latency, 0) + 1
+        if name == "external_agent_tool_completed":
+            agent_calls += 1
+            day_item["agents"] += 1
+            family = str(props.get("agent_family") or props.get("client_type") or "other")
+            agent_item = agent_families.setdefault(family, {"name": family, "calls": 0, "failed": 0, "tools": {}})
+            agent_item["calls"] += 1
+            agent_item["failed"] += int(is_failure)
+            tool = str(props.get("tool_name") or props.get("operation_class") or "unknown")
+            agent_item["tools"][tool] = agent_item["tools"].get(tool, 0) + 1
         if account_id in by_user:
             item = by_user[account_id]
             item["events"] += 1
             item["last_event_at"] = item["last_event_at"] or event.get("client_time")
-            props = event.get("properties") or {}
-            feature = str(props.get("feature") or name)
             item["features"][feature] = item["features"].get(feature, 0) + 1
             active_days.setdefault(account_id, set()).add(str(event.get("client_time") or "")[:10])
     for account_id, item in by_user.items():
         item["active_days"] = len(active_days.get(account_id, set()))
+    daily_items = []
+    for item in sorted(daily.values(), key=lambda value: value["date"]):
+        daily_items.append({**item, "installations": len(item["installations"])})
+    feature_items = []
+    for item in sorted(features.values(), key=lambda value: value["events"], reverse=True):
+        feature_items.append({**item, "users": len(item["users"]), "installations": len(item["installations"])})
     return {
         "days": max(1, min(int(days), 90)),
         "total_users": len(accounts),
         "active_users": sum(1 for item in by_user.values() if item["events"]),
+        "active_installations": len(installations),
+        "identified_installations": len(identified_installations),
+        "unattributed_installations": len(installations - identified_installations),
+        "unattributed_events": sum(1 for event in events if not event.get("account_id")),
         "total_events": len(events),
+        "result_capped": len(events) >= 10000,
+        "ai_calls": ai_calls,
+        "agent_calls": agent_calls,
+        "failures": failures,
         "event_counts": event_counts,
+        "daily": daily_items,
+        "features": feature_items,
+        "ai_profiles": sorted(ai_profiles.values(), key=lambda value: value["calls"], reverse=True),
+        "agent_families": sorted(agent_families.values(), key=lambda value: value["calls"], reverse=True),
         "users": list(by_user.values()),
     }
 
 
 ADMIN_DASHBOARD = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Caddie 内测数据</title>
-<style>body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#f5f7fa}main{max-width:1180px;margin:0 auto;padding:40px 24px}header{display:flex;justify-content:space-between;align-items:end;margin-bottom:24px}h1{margin:0;font-size:28px}p{color:#718096}.login,.panel{background:white;border:1px solid #dfe5ec;border-radius:8px;padding:20px}.login{display:flex;gap:10px}input,button,select{font:inherit;padding:10px 12px;border:1px solid #ccd5e0;border-radius:6px}input{flex:1}button{background:#2563eb;color:white;border-color:#2563eb;cursor:pointer}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.stat{background:white;border:1px solid #dfe5ec;padding:18px;border-radius:8px}.stat b{display:block;font-size:26px;margin-top:8px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #e7ebf0}th{color:#718096;font-size:12px}.muted{color:#8a96a6}.tag{display:inline-block;background:#eef4ff;color:#245ac7;padding:3px 7px;border-radius:5px;margin:2px}#content{display:none}@media(max-width:720px){.stats{grid-template-columns:1fr}.login{display:block}.login>*{box-sizing:border-box;width:100%;margin:4px 0}}</style></head>
-<body><main><header><div><h1>Caddie 内测数据</h1><p>按用户查看活跃、功能使用与反馈线索，不展示求职资料或 AI 正文。</p></div><select id="days"><option value="7">7 天</option><option value="14" selected>14 天</option><option value="30">30 天</option></select></header><section class="login" id="login"><input id="token" type="password" placeholder="Gateway 管理 Token"><button onclick="load()">打开数据台</button></section><div id="content"><section class="stats"><div class="stat">内测用户<b id="users">0</b></div><div class="stat">活跃用户<b id="active">0</b></div><div class="stat">行为事件<b id="events">0</b></div></section><section class="panel"><table><thead><tr><th>用户</th><th>批次</th><th>活跃天数</th><th>事件</th><th>主要使用</th><th>最后活跃</th></tr></thead><tbody id="rows"></tbody></table></section></div></main>
-<script>const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const apiBase=location.pathname.startsWith('/gateway/')?'/gateway':'';async function load(){const token=document.querySelector('#token').value||sessionStorage.caddieAdminToken;if(!token)return;sessionStorage.caddieAdminToken=token;const days=document.querySelector('#days').value;const r=await fetch(apiBase+'/admin/v1/analytics/overview?days='+days,{headers:{Authorization:'Bearer '+token}});if(!r.ok){let message='读取失败';try{message=(await r.json()).detail||message}catch{}alert(message);return}const d=await r.json();login.style.display='none';content.style.display='block';users.textContent=d.total_users;active.textContent=d.active_users;events.textContent=d.total_events;rows.innerHTML=d.users.map(u=>'<tr><td><b>'+esc(u.display_name||'待补充')+'</b><br><span class="muted">'+esc(u.email||u.id)+'</span></td><td>'+esc(u.cohort_id||'—')+'</td><td>'+u.active_days+'</td><td>'+u.events+'</td><td>'+Object.entries(u.features).sort((a,b)=>b[1]-a[1]).slice(0,4).map(x=>'<span class="tag">'+esc(x[0])+' '+x[1]+'</span>').join('')+'</td><td>'+esc((u.last_event_at||u.last_seen_at||'—').slice(0,19))+'</td></tr>').join('')}days.onchange=load;if(sessionStorage.caddieAdminToken)load();</script></body></html>"""
+<style>:root{--ink:#172033;--sub:#6b7788;--line:#dfe5ec;--blue:#2463eb;--green:#178565;--red:#c34c3b;--amber:#a66b13;--bg:#f4f6f8}*{box-sizing:border-box}body{margin:0;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg)}main{max-width:1320px;margin:0 auto;padding:32px 24px 60px}header.top{display:flex;justify-content:space-between;align-items:end;margin-bottom:20px}h1{margin:0;font-size:28px}h2{margin:0;font-size:17px}p{color:var(--sub);margin:7px 0 0}.toolbar{display:flex;gap:8px}input,button,select{font:inherit;padding:10px 12px;border:1px solid #cbd4df;border-radius:6px;background:white}button{background:var(--blue);color:white;border-color:var(--blue);cursor:pointer}.login,.panel,.metric{background:white;border:1px solid var(--line);border-radius:8px}.login{display:flex;gap:10px;padding:18px}.login input{flex:1}.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:16px 0}.metric{padding:16px}.metric span{display:block;color:var(--sub);font-size:12px}.metric b{display:block;font-size:25px;margin-top:7px}.metric small{color:#8b96a5}.metric.warn b{color:var(--amber)}.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-top:14px}.panel{padding:18px;min-width:0}.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.panel-head span{font-size:12px;color:var(--sub)}.quality{display:flex;gap:14px;align-items:flex-start;border-left:3px solid var(--amber);background:#fff9ed;padding:14px 16px;margin:14px 0}.quality b{white-space:nowrap;color:#75480c}.quality p{margin:0;color:#755d38}.chart{height:190px;display:flex;align-items:flex-end;gap:5px;border-bottom:1px solid var(--line);padding-top:10px}.bar-col{flex:1;min-width:4px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}.bar{width:100%;max-width:28px;min-height:2px;background:var(--blue);border-radius:3px 3px 0 0}.bar-col label{font-size:10px;color:#8a96a5;height:14px}.legend{display:flex;gap:16px;margin-top:12px;color:var(--sub);font-size:12px}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;background:var(--blue)}.dot.green{background:var(--green)}.dot.red{background:var(--red)}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e8edf2;vertical-align:top}th{color:var(--sub);font-size:11px;font-weight:600}td b{font-size:13px}.muted{color:#8792a1;font-size:12px}.tag{display:inline-block;background:#eef4ff;color:#245ac7;padding:3px 7px;border-radius:5px;margin:2px}.progress{height:6px;background:#edf1f5;border-radius:4px;overflow:hidden;margin-top:7px}.progress i{display:block;height:100%;background:var(--blue)}.rank{display:grid;gap:13px}.rank-row header{display:flex;justify-content:space-between}.rank-row small{color:var(--sub)}.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}.empty{color:var(--sub);padding:24px 0;text-align:center}#content{display:none}.section-title{margin-top:24px}.full{grid-column:1/-1}.status-good{color:var(--green)}.status-bad{color:var(--red)}@media(max-width:980px){.metrics{grid-template-columns:repeat(3,1fr)}.grid,.split{grid-template-columns:1fr}}@media(max-width:620px){main{padding:20px 14px}.metrics{grid-template-columns:repeat(2,1fr)}.login{display:block}.login>*{width:100%;margin:4px 0}header.top{display:block}.toolbar{margin-top:12px}}</style></head>
+<body><main><header class="top"><div><h1>Caddie 内测数据</h1><p>回答谁在用、用了什么、哪里失败，以及 AI 和外部 Agent 是否真正带来价值。</p></div><div class="toolbar"><select id="days"><option value="7">7 天</option><option value="14" selected>14 天</option><option value="30">30 天</option><option value="90">90 天</option></select><button id="refresh" onclick="load()">刷新</button></div></header><section class="login" id="login"><input id="token" type="password" placeholder="Gateway 管理 Token"><button onclick="load()">打开数据台</button></section><div id="content"><div id="quality"></div><section class="metrics"><div class="metric"><span>内测账户</span><b id="users">0</b><small>已发放资格</small></div><div class="metric"><span>活跃设备</span><b id="devices">0</b><small id="identified">已识别 0</small></div><div class="metric"><span>行为事件</span><b id="events">0</b><small id="cap"></small></div><div class="metric"><span>AI 调用</span><b id="aiCalls">0</b><small>模型能力使用</small></div><div class="metric"><span>外部 Agent</span><b id="agentCalls">0</b><small>MCP / 工具调用</small></div><div class="metric warn"><span>失败事件</span><b id="failures">0</b><small id="failureRate">失败率 0%</small></div></section><section class="grid"><div class="panel"><div class="panel-head"><h2>活跃与使用趋势</h2><span>按日粗粒度事件</span></div><div class="chart" id="dailyChart"></div><div class="legend"><span><i class="dot"></i>事件量</span><span><i class="dot green"></i>活跃设备</span><span><i class="dot red"></i>失败</span></div></div><div class="panel"><div class="panel-head"><h2>产品功能使用</h2><span>前 8 项</span></div><div class="rank" id="features"></div></div><div class="panel"><div class="panel-head"><h2>AI 调用质量</h2><span>按任务档位</span></div><div id="aiPanel"></div></div><div class="panel"><div class="panel-head"><h2>外部 Agent 使用</h2><span>按 Agent 类型</span></div><div id="agentPanel"></div></div></section><h2 class="section-title">内测用户</h2><section class="panel" style="margin-top:10px;overflow:auto"><table><thead><tr><th>用户</th><th>批次</th><th>账户状态</th><th>活跃天数</th><th>可归因事件</th><th>主要使用</th><th>最后连接</th></tr></thead><tbody id="rows"></tbody></table></section></div></main>
+<script>const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const apiBase=location.pathname.startsWith('/gateway/')?'/gateway':'';const labels={app_started:'启动 Caddie',view_opened:'打开页面',feature_action_completed:'完成功能动作',ai_call_completed:'AI 调用',external_agent_tool_completed:'外部 Agent',source_added:'添加资料',source_ingested:'资料入库',job_track_created:'建立岗位',asset_generated:'生成资产',feedback_submitted:'提交反馈',sources:'资料库',interview:'面试准备',applications:'投递管理'};const name=x=>labels[x]||x||'其他';function rank(items,valueKey,labelKey){const max=Math.max(1,...items.map(x=>x[valueKey]||0));return items.length?items.map(x=>`<div class="rank-row"><header><b>${esc(name(x[labelKey]))}</b><span>${x[valueKey]}</span></header><div class="progress"><i style="width:${Math.round((x[valueKey]||0)/max*100)}%"></i></div><small>${x.failed?`失败 ${x.failed}`:`涉及 ${x.installations||0} 台设备`}</small></div>`).join(''):'<div class="empty">暂无数据</div>'}async function load(){const token=document.querySelector('#token').value||sessionStorage.caddieAdminToken;if(!token)return;sessionStorage.caddieAdminToken=token;refresh.disabled=true;const r=await fetch(apiBase+'/admin/v1/analytics/overview?days='+days.value,{headers:{Authorization:'Bearer '+token}});refresh.disabled=false;if(!r.ok){let message='读取失败';try{message=(await r.json()).detail||message}catch{}alert(message);return}const d=await r.json();login.style.display='none';content.style.display='block';users.textContent=d.total_users;devices.textContent=d.active_installations;identified.textContent=`已识别 ${d.identified_installations} · 旧版未归因 ${d.unattributed_installations}`;events.textContent=d.total_events;cap.textContent=d.result_capped?'已达查询上限':'当前时间窗口';aiCalls.textContent=d.ai_calls;agentCalls.textContent=d.agent_calls;failures.textContent=d.failures;failureRate.textContent=`失败率 ${d.total_events?Math.round(d.failures/d.total_events*1000)/10:0}%`;quality.innerHTML=d.unattributed_events?`<div class="quality"><b>数据口径提示</b><p>${d.unattributed_events} 条历史事件来自身份系统上线前，可统计功能使用，但不能归到具体用户。用户更新客户端并补全邮箱后，新事件会自动归因。</p></div>`:'';const max=Math.max(1,...d.daily.map(x=>x.events));dailyChart.innerHTML=d.daily.length?d.daily.map((x,i)=>`<div class="bar-col" title="${x.date} · ${x.events} 事件 · ${x.installations} 设备 · ${x.failures} 失败"><div class="bar" style="height:${Math.max(3,Math.round(x.events/max*150))}px;${x.failures?'background:#c34c3b':''}"></div><label>${i%Math.max(1,Math.ceil(d.daily.length/7))===0?x.date.slice(5):''}</label></div>`).join(''):'<div class="empty">暂无趋势数据</div>';features.innerHTML=rank(d.features.slice(0,8),'events','name');aiPanel.innerHTML=rank(d.ai_profiles,'calls','name');agentPanel.innerHTML=rank(d.agent_families,'calls','name');rows.innerHTML=d.users.length?d.users.map(u=>`<tr><td><b>${esc(u.display_name||'待补充')}</b><br><span class="muted">${esc(u.email||u.id)}</span></td><td>${esc(u.cohort_id||'—')}</td><td class="${u.status==='active'?'status-good':'status-bad'}">${esc(u.status)}</td><td>${u.active_days}</td><td>${u.events}</td><td>${Object.entries(u.features).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>`<span class="tag">${esc(name(x[0]))} ${x[1]}</span>`).join('')||'—'}</td><td>${esc((u.last_event_at||u.last_seen_at||'—').slice(0,19))}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">暂无内测账户</td></tr>'}days.onchange=load;if(sessionStorage.caddieAdminToken)load();</script></body></html>"""
 
 
 @app.get("/admin", response_class=HTMLResponse)
