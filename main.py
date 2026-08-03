@@ -19,7 +19,14 @@ def start_server():
     try:
         import uvicorn
         from server import app
-        uvicorn.run(app, host=HOST, port=PORT, log_level="warning", reload=False)
+        uvicorn.run(
+            app,
+            host=HOST,
+            port=PORT,
+            log_level="warning",
+            reload=False,
+            log_config=None if getattr(sys, "frozen", False) else uvicorn.config.LOGGING_CONFIG,
+        )
     except Exception:
         details = traceback.format_exc()
         print(details, file=sys.stderr)
