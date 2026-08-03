@@ -9482,7 +9482,14 @@ const MARKETING_NATIVE_STAGES=[
     {selector:'.prep-map-tree-doc',matchText:'目标岗位能力模型',caption:'打开真实岗位能力模型继续准备'}]},
   {label:'面试复盘',title:'原始记录、问题与改进动作留在同一条求职线上',detail:'正在使用正式「面试与复盘」',steps:[
     {selector:'#nav button[data-v="interview"]',caption:'打开正式「面试与复盘」'},
-    {selector:'.iv-hub-round',matchText:'已结束',caption:'打开一轮预置的虚构面试与真实问题拆解'}]},
+    {selector:'.iv-hub-round',matchText:'星云科技',caption:'打开星云科技业务一面的真实轮次'},
+    {selector:'.iv-stage-nav button[data-iv-tab="source"]',caption:'进入本轮真实面后材料'},
+    {selector:'.iv-agent-record-actions button',matchText:'确认答卷',caption:'从逐字稿进入结构化答卷'},
+    {selector:'.iv-answer-hero',action:'observe',caption:'查看整场节奏与可编辑答卷'},
+    {selector:'.iv-question-index',caption:'打开一道真实问题进行逐题复盘'},
+    {selector:'.iv-question-detail header',action:'observe',caption:'查看问题与面试官意图'},
+    {selector:'.iv-question-answer',action:'observe',caption:'核对当时的真实回答'},
+    {selector:'.iv-classify-panel',action:'observe',caption:'确认考察能力、关联经历与追问角度'}]},
   {label:'反馈回流',title:'把面试追问真正写回刚才的项目',detail:'正在使用正式项目面试准备流程',steps:[
     {selector:'#nav button[data-v="projects"]',caption:'回到正式职业档案'},
     {selector:'.exp-company-card',matchText:'澄海科技',caption:'打开刚才写入的真实经历'},
