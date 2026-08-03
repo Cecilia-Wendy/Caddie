@@ -27,14 +27,17 @@ app = FastAPI(title="Caddie AI Gateway", version="1.0.0")
 DATA_DIR = Path(os.environ.get("CADDIE_GATEWAY_DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "gateway.sqlite3"
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
-DEFAULT_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEFAULT_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 MAX_INPUT_BYTES = int(os.environ.get("CADDIE_GATEWAY_MAX_INPUT_BYTES", "200000"))
 MAX_OUTPUT_TOKENS = int(os.environ.get("CADDIE_GATEWAY_MAX_OUTPUT_TOKENS", "6000"))
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("CADDIE_GATEWAY_TIMEOUT_SECONDS", "180"))
 DEFAULT_TRIAL_DAYS = int(os.environ.get("CADDIE_TRIAL_DAYS", "14"))
-DEFAULT_TOTAL_TOKENS = int(os.environ.get("CADDIE_TRIAL_TOTAL_TOKENS", "2000000"))
-DEFAULT_DAILY_TOKENS = int(os.environ.get("CADDIE_TRIAL_DAILY_TOKENS", "300000"))
-DEFAULT_DAILY_CALLS = int(os.environ.get("CADDIE_TRIAL_DAILY_CALLS", "30"))
+DEFAULT_TOTAL_TOKENS = int(os.environ.get("CADDIE_TRIAL_TOTAL_TOKENS", "1000000"))
+DEFAULT_DAILY_TOKENS = int(os.environ.get("CADDIE_TRIAL_DAILY_TOKENS", "150000"))
+DEFAULT_DAILY_CALLS = int(os.environ.get("CADDIE_TRIAL_DAILY_CALLS", "20"))
+PRICE_CACHE_HIT_CNY = float(os.environ.get("DEEPSEEK_CACHE_HIT_CNY_PER_M", "0.02"))
+PRICE_CACHE_MISS_CNY = float(os.environ.get("DEEPSEEK_CACHE_MISS_CNY_PER_M", "1"))
+PRICE_OUTPUT_CNY = float(os.environ.get("DEEPSEEK_OUTPUT_CNY_PER_M", "2"))
 ADMIN_TOKEN = os.environ.get("CADDIE_GATEWAY_ADMIN_TOKEN", "").strip()
 WEBSITE_CALLBACK_URL = os.environ.get("CADDIE_WEBSITE_CALLBACK_URL", "").strip()
 GATEWAY_CALLBACK_TOKEN = os.environ.get("CADDIE_GATEWAY_CALLBACK_TOKEN", "").strip()
@@ -87,9 +90,18 @@ def _connect() -> sqlite3.Connection:
                calls INTEGER NOT NULL DEFAULT 0,
                input_tokens INTEGER NOT NULL DEFAULT 0,
                output_tokens INTEGER NOT NULL DEFAULT 0,
+               cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+               cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
                PRIMARY KEY (tester_id, usage_date)
            )"""
     )
+    for column in ("cache_hit_tokens", "cache_miss_tokens"):
+        try:
+            conn.execute(
+                f"ALTER TABLE daily_usage ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass
     conn.execute(
         """CREATE TABLE IF NOT EXISTS invites (
                id TEXT PRIMARY KEY,
@@ -223,7 +235,9 @@ def _all_usage(tester_id: str) -> dict:
     row = conn.execute(
         """SELECT COALESCE(SUM(calls),0) calls,
                   COALESCE(SUM(input_tokens),0) input_tokens,
-                  COALESCE(SUM(output_tokens),0) output_tokens
+                  COALESCE(SUM(output_tokens),0) output_tokens,
+                  COALESCE(SUM(cache_hit_tokens),0) cache_hit_tokens,
+                  COALESCE(SUM(cache_miss_tokens),0) cache_miss_tokens
            FROM daily_usage WHERE tester_id=?""",
         (tester_id,),
     ).fetchone()
@@ -240,6 +254,7 @@ def _usage(tester_id: str) -> dict:
     conn.close()
     return dict(row) if row else {
         "calls": 0, "input_tokens": 0, "output_tokens": 0,
+        "cache_hit_tokens": 0, "cache_miss_tokens": 0,
     }
 
 
@@ -278,16 +293,40 @@ def _reserve_call(tester: dict) -> None:
 def _record_tokens(tester_id: str, usage: dict) -> None:
     prompt = max(0, int(usage.get("prompt_tokens") or 0))
     completion = max(0, int(usage.get("completion_tokens") or 0))
+    cache_hit = max(0, int(usage.get("prompt_cache_hit_tokens") or 0))
+    cache_miss = max(0, int(usage.get("prompt_cache_miss_tokens") or 0))
     with _db_lock:
         conn = _connect()
         conn.execute(
             """UPDATE daily_usage
-               SET input_tokens=input_tokens+?,output_tokens=output_tokens+?
+               SET input_tokens=input_tokens+?,output_tokens=output_tokens+?,
+                   cache_hit_tokens=cache_hit_tokens+?,
+                   cache_miss_tokens=cache_miss_tokens+?
                WHERE tester_id=? AND usage_date=?""",
-            (prompt, completion, tester_id, date.today().isoformat()),
+            (prompt, completion, cache_hit, cache_miss, tester_id, date.today().isoformat()),
         )
         conn.commit()
         conn.close()
+
+
+def _usage_metrics(raw: dict) -> dict:
+    result = dict(raw)
+    input_tokens = max(0, int(result.get("input_tokens") or 0))
+    output_tokens = max(0, int(result.get("output_tokens") or 0))
+    cache_hit = max(0, int(result.get("cache_hit_tokens") or 0))
+    reported_miss = max(0, int(result.get("cache_miss_tokens") or 0))
+    cache_miss = max(reported_miss, input_tokens - cache_hit)
+    cache_total = cache_hit + cache_miss
+    result["cache_hit_rate"] = round(cache_hit / cache_total, 4) if cache_total else 0.0
+    result["estimated_cost_cny"] = round(
+        (
+            cache_hit * PRICE_CACHE_HIT_CNY
+            + cache_miss * PRICE_CACHE_MISS_CNY
+            + output_tokens * PRICE_OUTPUT_CNY
+        ) / 1_000_000,
+        6,
+    )
+    return result
 
 
 @app.get("/health")
@@ -487,8 +526,8 @@ def models(authorization: str | None = Header(None)):
 @app.get("/v1/usage")
 def usage(authorization: str | None = Header(None)):
     tester = _authenticate(authorization)
-    current = _usage(tester["tester_id"])
-    total = _all_usage(tester["tester_id"])
+    current = _usage_metrics(_usage(tester["tester_id"]))
+    total = _usage_metrics(_all_usage(tester["tester_id"]))
     return {
         **current,
         "daily_calls_limit": tester["daily_calls"],
@@ -516,6 +555,9 @@ async def chat_completions(request: Request, authorization: str | None = Header(
     if not isinstance(messages, list) or not messages:
         raise HTTPException(400, "messages 不能为空")
     payload["model"] = DEFAULT_MODEL
+    # Use an opaque stable identifier so DeepSeek isolates KV cache per tester
+    # without receiving an email, device identifier, or other personal data.
+    payload["user_id"] = "caddie_" + _digest(tester["tester_id"])[:32]
     payload["max_tokens"] = min(
         MAX_OUTPUT_TOKENS,
         max(1, int(payload.get("max_tokens") or MAX_OUTPUT_TOKENS)),

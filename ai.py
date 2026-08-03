@@ -40,7 +40,7 @@ PRESETS = [
     {
         "key": "caddie_hosted", "name": "Caddie 托管 AI", "type": "openai",
         "base_url": "https://43-128-7-135.sslip.io/gateway/v1",
-        "models": ["deepseek-chat"],
+        "models": ["deepseek-v4-flash"],
         "key_hint": "在 Caddie 中输入邀请码激活，无需填写 API Key",
         "capabilities": ["text", "reasoning", "writing", "structured_output", "long_context"],
         "data_policy": "domestic",
@@ -583,7 +583,7 @@ def install_hosted_provider() -> dict:
         "name": "Caddie 托管 AI",
         "type": "openai",
         "base_url": hosted_access.DEFAULT_BASE_URL,
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "api_key": hosted_access.KEYCHAIN_MARKER,
         "capabilities": ["text", "reasoning", "writing", "structured_output", "long_context"],
         "data_policy": "domestic",
@@ -591,7 +591,7 @@ def install_hosted_provider() -> dict:
     set_active(result["id"])
     if not existing:
         for profile in MODEL_PROFILE_DEFS:
-            set_model_profile(profile, [result["id"]])
+            set_model_profile(profile, result["id"])
     return result
 
 

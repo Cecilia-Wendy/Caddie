@@ -11,7 +11,7 @@ services:
       - key: CADDIE_GATEWAY_TESTERS_JSON
         sync: false
       - key: DEEPSEEK_MODEL
-        value: deepseek-chat
+        value: deepseek-v4-flash
       - key: CADDIE_GATEWAY_DATA_DIR
         value: /data
     disk:

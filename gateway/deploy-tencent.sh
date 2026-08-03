@@ -75,7 +75,7 @@ if [ -n "${CADDIE_GATEWAY_CALLBACK_TOKEN:-}" ]; then
 fi
 printf 'CADDIE_GATEWAY_TESTERS_JSON={"tester-01":{"token":"%s","daily_calls":50,"daily_tokens":300000},"tester-02":{"token":"%s","daily_calls":50,"daily_tokens":300000}}\n' \
   "$TESTER_01_TOKEN" "$TESTER_02_TOKEN" >> "$ENV_FILE"
-printf 'DEEPSEEK_MODEL=deepseek-chat\nCADDIE_GATEWAY_DATA_DIR=/data\n' >> "$ENV_FILE"
+printf 'DEEPSEEK_MODEL=deepseek-v4-flash\nCADDIE_GATEWAY_DATA_DIR=/data\n' >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 unset DEEPSEEK_API_KEY TESTER_01_TOKEN TESTER_02_TOKEN ADMIN_TOKEN
 
@@ -131,7 +131,7 @@ docker exec caddy caddy reload --config /etc/caddy/Caddyfile
 echo
 echo "CADDIE_GATEWAY_DEPLOYED"
 echo "Base URL: https://${PUBLIC_HOST}/gateway/v1"
-echo "Model: deepseek-chat"
+echo "Model: deepseek-v4-flash"
 echo "Tester credentials saved at: ${TOKEN_FILE}"
 echo "Admin credential saved at: ${ADMIN_FILE}"
 echo "Credentials and the DeepSeek API key were not printed."

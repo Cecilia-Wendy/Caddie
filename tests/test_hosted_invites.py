@@ -38,8 +38,8 @@ class HostedInviteTests(unittest.TestCase):
         self.assertEqual(activated.status_code, 200)
         payload = activated.json()
         self.assertTrue(payload["credential"].startswith("caddie_"))
-        self.assertEqual(payload["total_tokens_limit"], 2_000_000)
-        self.assertEqual(payload["daily_calls_limit"], 30)
+        self.assertEqual(payload["total_tokens_limit"], 1_000_000)
+        self.assertEqual(payload["daily_calls_limit"], 20)
         reused = self.client.post(
             "/v1/activate",
             json={"invite_code": code, "device_id": "mac-other"},
@@ -90,8 +90,9 @@ class HostedInviteTests(unittest.TestCase):
             "/v1/usage", headers={"Authorization": f"Bearer {credential}"}
         )
         self.assertEqual(usage.status_code, 200)
-        self.assertEqual(usage.json()["daily_tokens_limit"], 300_000)
-        self.assertEqual(usage.json()["total_tokens_limit"], 2_000_000)
+        self.assertEqual(usage.json()["daily_tokens_limit"], 150_000)
+        self.assertEqual(usage.json()["daily_calls_limit"], 20)
+        self.assertEqual(usage.json()["total_tokens_limit"], 1_000_000)
         self.assertIn("total_usage", usage.json())
 
     def test_admin_can_pause_and_extend_account(self):

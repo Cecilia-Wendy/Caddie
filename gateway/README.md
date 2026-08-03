@@ -23,9 +23,9 @@
 macOS Keychain，用户看不到 DeepSeek Key 或 Gateway Token。
 
 - Base URL：`https://你的-gateway-域名/v1`
-- Model：`deepseek-chat`
+- Model：`deepseek-v4-flash`
 
-Gateway 只保存 tester ID、日期、调用次数和 token 数，不保存请求正文或回复正文。
+Gateway 只保存 tester ID、日期、调用次数、token 数和缓存命中统计，不保存请求正文或回复正文。
 
 ## 官网联动
 
