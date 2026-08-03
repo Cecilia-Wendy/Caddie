@@ -45,7 +45,9 @@ jobs:
 
       - name: Build Windows package
         shell: pwsh
-        run: .\scripts\build-windows-alpha.ps1
+        run: |
+          .\.venv\Scripts\python.exe -c "from pathlib import Path; Path('main.py').read_text(encoding='utf-8').encode('gbk')"
+          .\scripts\build-windows-alpha.ps1
 
       - name: Smoke test packaged desktop server
         shell: pwsh
