@@ -79,6 +79,8 @@ def _windows_protect(value: str) -> str:
 
 
 def _windows_unprotect(value: str) -> str:
+    if not value:
+        return ""
     try:
         raw = base64.b64decode(value)
         source_buffer = ctypes.create_string_buffer(raw)
